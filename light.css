@@ -1,0 +1,389 @@
+/* =============================================================================
+   light.css — adapted from the original hand-made stylesheet.
+
+   WHAT CHANGED FROM THE ORIGINAL
+   - Colours are now defined once, as variables in :root below, instead of being
+     scattered as literals. Re-theme the whole site by editing that block.
+   - Font files repointed to /fonts/ (only the 4 weights in use are bundled).
+   - The nav wraps on small screens (was float-based).
+   - Fixed a global `img { height: 51px }` rule that shrank every image.
+   - Removed rules for features that were cut (Desmos, competition console,
+     an unused toggle switch).
+
+   HOW TO RESTYLE: edit the variables in :root. The rules below mostly just
+   reference them; you rarely need to touch anything else.
+   ============================================================================= */
+
+/* ---- Design tokens: edit these to re-theme -------------------------------- */
+:root {
+	--bg:          #fdfdfc;   /* page + main background        (was #ffe6ea pink) */
+	--surface:     #f5f4f1;   /* figures, boxes, collapsibles  (was #fff8f5)      */
+	--text:        #1b1b1a;   /* body ink                                          */
+	--link:        #2f5aa8;   /* links                          (was #4ca200 green)*/
+	--link-hover:  #244a8f;
+	--border:      #cfccc6;   /* hairlines and box borders                         */
+	--nav-bg:      #333333;   /* dark nav bar                                       */
+	--nav-hover:   #565c5a;
+	--header-bg:   #45474f;   /* title band above the nav       (was #667)         */
+	--header-text: #ffffff;
+	--muted:       #9a978f;   /* captions / secondary text                         */
+
+	--font-body:   "CM", serif;               /* swap this to change the whole site */
+	--font-mono:   "Courier New", monospace;
+}
+
+/* ---- Fonts ----------------------------------------------------------------
+   "CM" = New Computer Modern, the open version of the classic LaTeX serif. */
+@font-face {
+	font-family: CM;
+	src: url("/fonts/NewCM10-Regular.otf") format("opentype");
+	font-display: swap;
+}
+@font-face {
+	font-family: CM;
+	font-weight: bold;
+	src: url("/fonts/NewCM10-Bold.otf") format("opentype");
+	font-display: swap;
+}
+@font-face {
+	font-family: CM;
+	font-style: italic;
+	src: url("/fonts/NewCM10-Italic.otf") format("opentype");
+	font-display: swap;
+}
+@font-face {
+	font-family: CM;
+	font-weight: bold;
+	font-style: italic;
+	src: url("/fonts/NewCM10-BoldItalic.otf") format("opentype");
+	font-display: swap;
+}
+
+/* ---- Base ----------------------------------------------------------------- */
+p, ul {
+	margin: 0;
+}
+
+h1 {
+	text-align: center;
+}
+
+.alignleft  { text-align: left; }
+.alignright { text-align: right; }
+
+.name {
+	background-color: var(--surface);
+	text-align: center;
+}
+
+.center {
+	clear: both;
+	text-align: center;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+html {
+	background-color: var(--bg);
+}
+
+body {
+	color: var(--text);
+	font-family: var(--font-body);
+	text-align: justify;
+	text-justify: inter-word;
+	margin: 0;
+}
+
+main {
+	background-color: var(--bg);
+	padding: 0 1.5% 1.5%;
+	margin: 0 1.5% 1.5%;
+
+	/* Break long words / URLs instead of overflowing on narrow screens. */
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+
+	/* Hyphenate at line breaks where supported. */
+	-ms-hyphens: auto;
+	-moz-hyphens: auto;
+	-webkit-hyphens: auto;
+	hyphens: auto;
+}
+
+a          { color: var(--link); }
+a:link     { text-decoration: none; }
+a:hover    { color: var(--link-hover); text-decoration: underline; }
+
+date {
+	font-weight: normal;
+	font-style: italic;
+	font-size: medium;
+	text-align: right;
+	overflow-wrap: initial;
+	word-wrap: initial;
+	word-break: initial;
+}
+
+mono, code, pre {
+	font-family: var(--font-mono);
+}
+
+/* ---- Images & figures -----------------------------------------------------
+   Images are responsive by default (fixes the old global `img{height:51px}`). */
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+figure img {
+	width: 100%;
+	height: auto;
+}
+
+figure.box {
+	width: 90%;
+	display: block;
+	vertical-align: center;
+	padding: 10px;
+	border: 2px solid var(--border);
+	margin: 10px auto;
+	background-color: var(--surface);
+	overflow-x: auto;
+}
+
+figure.center {
+	width: 40%;
+	display: block;
+	vertical-align: center;
+	overflow-x: auto;
+}
+
+figure.side {
+	width: 40%;
+	border: 2px solid var(--border);
+	background-color: var(--surface);
+	padding: 10px;
+	margin: auto 10px;
+	text-align: center;
+}
+figure.side image {
+	object-fit: scale-down;
+}
+
+div.gallery {
+	width: 90%;
+	display: block;
+	overflow-x: auto;
+	vertical-align: center;
+	white-space: nowrap;
+	margin: 10px auto;
+}
+div.gallery img {
+	width: 50%;
+	height: auto;
+}
+
+.rel {
+	display: flex;
+	justify-content: space-between;
+	text-align: left;
+}
+
+/* Wrapper for TikZ / SVG diagrams and generic bordered figures. */
+.tikz {
+	width: min(100%, 400px);
+	height: auto;
+	margin: 0 auto;
+	background-color: white;
+}
+.fig {
+	border: 2px solid var(--border);
+	margin: 0 auto;
+}
+
+/* ---- Embedded video (responsive 16:9) ------------------------------------ */
+.video {
+	position: relative;
+	padding-bottom: 56.25%;
+	height: 0;
+}
+.video iframe {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.clickable { cursor: pointer; }
+
+/* ---- MathJax --------------------------------------------------------------
+   Let wide display equations scroll sideways rather than stretch the page. */
+mjx-container[display="true"] {
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+/* ---- Code & quotes (added for blog posts) --------------------------------- */
+code {
+	background: var(--surface);
+	padding: 0.1em 0.35em;
+	border-radius: 4px;
+	font-size: 0.95em;
+}
+pre {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 12px 14px;
+	overflow-x: auto;      /* long lines scroll instead of breaking the layout */
+	text-align: left;      /* don't justify code */
+	line-height: 1.45;
+}
+pre code {
+	background: none;
+	padding: 0;
+	font-size: inherit;
+}
+
+blockquote {
+	margin: 1em 0;
+	padding: 0.25em 1em;
+	border-left: 3px solid var(--border);
+	font-style: italic;
+}
+
+/* Non-selectable line breaks (kept from the original). */
+br {
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+
+/* ---- Header: title band + nav --------------------------------------------- */
+/* The coloured band that holds the name and the nav (was an inline style). */
+.titleband {
+	text-align: center;
+	background-color: var(--header-bg);
+	color: var(--header-text);
+}
+
+.titlebar {
+	font-size: 30px;
+	font-family: Georgia, serif;
+}
+.subbar {
+	font-size: 20px;
+	color: var(--muted);
+	font-family: Georgia, serif;
+}
+
+/* The dark navigation bar. Now a wrapping flex row so it stays usable on
+   phones (was float-based). */
+ul.menu {
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+	background-color: var(--nav-bg);
+	font-size: 22px;
+	font-family: "Trebuchet MS", sans-serif;
+	font-weight: bold;
+
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+}
+
+li.menu {
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+
+li.menu a, .menu.dropbtn {
+	display: inline-block;
+	color: var(--header-text);
+	text-align: center;
+	padding: 14px 16px;
+	text-decoration: none;
+}
+
+li.menu a:hover, .menu.dropdown:hover .menu.dropbtn {
+	background-color: var(--nav-hover);
+	text-decoration: none;
+}
+
+/* Dropdown menus (kept in case you want sub-pages later; unused by default). */
+li.menu.dropdown { display: inline-block; }
+.menu.dropdown-content {
+	display: none;
+	position: absolute;
+	background-color: #f9f9f9;
+	min-width: 160px;
+	box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+	z-index: 1;
+	font-weight: normal;
+}
+.menu.dropdown-content a {
+	color: black;
+	padding: 12px 16px;
+	text-decoration: none;
+	display: block;
+	text-align: left;
+}
+.menu.dropdown-content a:hover {
+	background-color: var(--nav-hover);
+	color: white;
+}
+.menu.dropdown:hover .menu.dropdown-content {
+	display: block;
+	z-index: 11;
+}
+
+/* ---- Collapsible sections (used by helpful_stuff.js) ---------------------- */
+.collapsible {
+	background-color: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+	font-family: var(--font-body);
+	padding: 10px;
+	width: 100%;
+	border: 2px solid var(--border);
+	border-bottom: none;
+	text-align: center;
+	outline: none;
+	font-size: 20px;
+}
+.collapsible:hover { background-color: var(--border); }
+.active            { background-color: var(--border); }
+
+.content {
+	max-height: 0;
+	overflow: hidden;
+	transition: max-height 0.2s ease-out;
+	border: 2px solid var(--border);
+	border-top: none;
+	padding: 0 18px;
+	background-color: var(--surface);
+}
+
+/* ---- Footer --------------------------------------------------------------- */
+footer hr {
+	border: 0;
+	border-top: 2px solid var(--text);
+}
+.footer-content {
+	margin: 0 3% 20px;
+}
+
+/* ---- Text selection colour ------------------------------------------------ */
+::selection { background: #bdd1ff; }
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+	* { transition: none !important; }
+}

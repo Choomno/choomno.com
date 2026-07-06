@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hello, world — a sample post showing the building blocks.">
+    <title>Hello, world — Your Name</title>
+
+    <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/light.css">
+
+    <!-- MathJax: engine settings live in /mathjax-config.js (loaded before the
+         library); your LaTeX macros live in macros.html. -->
+    <script src="/mathjax-config.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+    <script defer src="/includes.js"></script>
+    <script defer src="/helpful_stuff.js"></script>
+</head>
+
+<body>
+<div id="head"></div>
+<div id="macros"></div>
+<main>
+    <!-- ======================================================================
+         This file is a working template. Copy it to start a new post, change
+         the <title> and <h1>, delete the demo sections you don't need, and add
+         a line linking to it from /blog/index.html.
+         ====================================================================== -->
+
+    <h1>Hello, world</h1>
+    <p><date>Posted July 6, 2026</date></p>
+
+    <p>
+        This is a sample post. It exists to show the pieces you have to work with —
+        prose, math, code, figures, quotes, and collapsible asides — so you can copy the
+        bits you need. Delete everything you don't.
+    </p>
+
+    <h2>Math</h2>
+    <p>
+        Inline math sits in the sentence with single dollar signs: the golden ratio is
+        $\varphi = \tfrac{1 + \sqrt 5}{2}$. Displayed math uses <mono>\[ … \]</mono> and gets
+        centered on its own line:
+    </p>
+    \[ \sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}. \]
+    <p>
+        The macros defined in <mono>macros.html</mono> also work here — for instance
+        $\abs{x}$ and $\R$ come from there.
+    </p>
+
+    <h2>Code</h2>
+    <p>Code blocks are monospaced and scroll sideways if a line is long:</p>
+<pre><code>def fib(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a</code></pre>
+    <p>Note that a dollar sign in code, like <code>echo "$HOME"</code>, is left alone.</p>
+
+    <h2>A figure</h2>
+    <p>Wrap images (or inline SVG, as here) in a <mono>&lt;figure&gt;</mono> with a caption:</p>
+    <figure class="box">
+        <svg viewBox="0 0 320 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A sine curve">
+            <line x1="10" y1="80" x2="310" y2="80" stroke="#999" stroke-width="1"/>
+            <path d="M10 80 Q 60 10 110 80 T 210 80 T 310 80" fill="none" stroke="#2f5aa8" stroke-width="2"/>
+        </svg>
+        <figcaption>A caption describing the figure.</figcaption>
+    </figure>
+
+    <h2>A quote</h2>
+    <blockquote>
+        Block quotes are set off from the body. Good for an epigraph or a passage you're
+        responding to.
+    </blockquote>
+
+    <h2>A collapsible aside</h2>
+    <p>Click to expand — handy for tangents, proofs, or spoilers:</p>
+    <button class="collapsible">Show the aside</button>
+    <div class="content">
+        <p>Hidden until clicked. This uses <mono>helpful_stuff.js</mono>.</p>
+    </div>
+
+    <p style="margin-top: 2rem;"><a href="/blog/">&larr; Back to the blog</a></p>
+</main>
+<div id="foot"></div>
+</body>
+</html>
