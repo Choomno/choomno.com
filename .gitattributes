@@ -1,0 +1,15 @@
+# Normalize text files to LF in the repository (avoids CRLF diff noise between
+# Windows editing and Linux hosting).
+* text=auto eol=lf
+
+# Binary assets — never touch line endings.
+*.otf   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
