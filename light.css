@@ -30,6 +30,13 @@
 
 	--font-body:   "CM", serif;               /* swap this to change the whole site */
 	--font-mono:   "Courier New", monospace;
+
+	/* Content column: a fixed max-width, centred, is the standard way personal
+	   sites stay narrow and readable on any screen (rather than % margins that
+	   scale forever). --gutter is the side padding that keeps text off the edge
+	   on small screens. Tweak --content-max to taste; ~600–800px is typical. */
+	--content-max: 60rem;   /* content column width (60rem = 960px at a 16px base)  */
+	--gutter:      24px;
 }
 
 /* ---- Fonts ----------------------------------------------------------------
@@ -90,6 +97,7 @@ html {
 body {
 	color: var(--text);
 	font-family: var(--font-body);
+	font-size: 18px;
 	text-align: justify;
 	text-justify: inter-word;
 	margin: 0;
@@ -97,8 +105,9 @@ body {
 
 main {
 	background-color: var(--bg);
-	padding: 0 1.5% 1.5%;
-	margin: 0 1.5% 1.5%;
+	max-width: var(--content-max);
+	padding: 0 var(--gutter) 1.5%;
+	margin: 0 auto 1.5%;
 
 	/* Break long words / URLs instead of overflowing on narrow screens. */
 	overflow-wrap: break-word;
@@ -185,6 +194,13 @@ div.gallery img {
 	height: auto;
 }
 
+/* "Springer GTM" book-cover-and-blurb table (about page): the cover keeps its
+   set width (the global img{max-width:100%} would otherwise let it collapse to
+   nothing in the auto-layout table), top-aligned, with a gap before the text. */
+table.gtm td { vertical-align: top; }
+table.gtm td:first-child { padding-right: 18px; }
+table.gtm img { max-width: none; }
+
 .rel {
 	display: flex;
 	justify-content: space-between;
@@ -266,35 +282,62 @@ br {
 /* ---- Header: title band + nav --------------------------------------------- */
 /* The coloured band that holds the name and the nav (was an inline style). */
 .titleband {
-	text-align: center;
-	background-color: var(--header-bg);
+	background-color: var(--header-bg);   /* full-bleed coloured band */
 	color: var(--header-text);
 }
 
+/* The header's centred content column; same width as main, so the name and
+   nav line up with the body text below. */
+.bandinner {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: flex-end;   /* bottoms of the tagline and the buttons line up */
+	row-gap: 10px;           /* gap above the nav when it drops to its own line */
+	column-gap: 2rem;        /* min space between name and nav; the nav drops once
+	                            they'd get closer than this, before they collide */
+	text-align: left;
+	max-width: var(--content-max);
+	margin: 0 auto;
+	padding: 14px var(--gutter);
+}
+
+/* Name/tagline and nav share one line while they both fit; because the nav
+   can't shrink (flex-shrink: 0 on ul.menu) it never crams onto the title's
+   line — the moment they don't both fit, it drops to its own line and
+   left-aligns. Once on its own line, the buttons scale down (font clamp on
+   ul.menu) on narrow screens to hold one row; max-width is the wrap fallback. */
+
 .titlebar {
-	font-size: 30px;
+	font-size: 26px;
 	font-family: Georgia, serif;
+	flex-shrink: 0;   /* keep full width so the nav drops to its own line, not cramped */
 }
 .subbar {
-	font-size: 20px;
+	font-size: 18px;
+	line-height: 1;   /* box hugs the text bottom so the nav can line up with it */
 	color: var(--muted);
 	font-family: Georgia, serif;
 }
 
-/* The dark navigation bar. Now a wrapping flex row so it stays usable on
-   phones (was float-based). */
+/* The navigation. A wrapping flex row so it stays usable on phones. The dark
+   containing bar was removed; the items now sit on the header band, pushed to
+   the right. */
 ul.menu {
 	list-style-type: none;
 	margin: 0;
 	padding: 0;
-	background-color: var(--nav-bg);
-	font-size: 22px;
-	font-family: "Trebuchet MS", sans-serif;
+	font-size: clamp(11px, 3.2vw, 17px);   /* full size until the row gets tight on
+	                                          its own line, then scales down to fit */
+	font-family: Georgia, serif;
 	font-weight: bold;
 
 	display: flex;
 	flex-wrap: wrap;
-	justify-content: center;
+	flex-shrink: 0;                /* don't shrink onto the title's line...        */
+	justify-content: flex-start;   /* ...drop to a new line and left-align instead */
+	max-width: 100%;               /* ...but cap to the row so the buttons wrap on
+	                                  narrow (mobile) screens instead of overflowing */
 }
 
 li.menu {
@@ -308,8 +351,16 @@ li.menu a, .menu.dropbtn {
 	display: inline-block;
 	color: var(--header-text);
 	text-align: center;
-	padding: 14px 16px;
+	line-height: 1;          /* text bottom sits at the box bottom */
+	padding: 0.5em 0.8em 0;  /* em units so the whole button scales with the font;
+	                            no bottom padding keeps the text on the tagline line */
 	text-decoration: none;
+}
+
+/* First button lines up with the name's left edge (matters once the nav wraps
+   onto its own line). */
+li.menu:first-child a {
+	padding-left: 0;
 }
 
 li.menu a:hover, .menu.dropdown:hover .menu.dropbtn {
@@ -376,8 +427,13 @@ footer hr {
 	border: 0;
 	border-top: 2px solid var(--text);
 }
+footer {
+	max-width: var(--content-max);
+	margin: 0 auto;
+	padding: 0 var(--gutter);
+}
 .footer-content {
-	margin: 0 3% 20px;
+	margin: 0 0 20px;
 }
 
 /* ---- Text selection colour ------------------------------------------------ */
