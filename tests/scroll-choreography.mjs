@@ -12,20 +12,24 @@ for(const m of marks.slice(0,-1)){
  assert.ok(left>0&&Math.abs(left-right)<1e-7);
 }
 let previous=0;for(let y=0;y<=2400;y++){const p=phaseAtScroll(y,marks);assert.ok(p>=previous);previous=p;}
-// The scroll parameter follows a single circle around the fixed original
+// The scroll parameter follows a planar route around the fixed original
 // cell center. Forward progression moves the eye toward screen-right,
 // so stationary text travels from right to left.
 const origin=[1,0,0,0],initial=readingPose(0),final=readingPose(readingPhase(3));
-const initialEye=initial.map(row=>row[0]);
+let minimumRadius=Infinity,maximumRadius=0;
 for(let y=0;y<2000;y+=5){
  const phase=phaseAtScroll(y,marks),next=phaseAtScroll(y+.01,marks);
  const frame=readingPose(phase),following=readingPose(next),eye=frame.map(row=>row[0]);
  const right=frame.map(row=>row[1]),up=frame.map(row=>row[2]),forward=frame.map(row=>row[3]);
- assert.ok(Math.abs(dot(eye,origin)-dot(initialEye,origin))<1e-10);
+ assert.ok(eye.every(Number.isFinite)&&eye[0]>0);
+ assert.ok(Math.abs(dot(eye,eye)+1)<1e-10);
+ const radius=Math.acosh(-dot(eye,origin));
+ minimumRadius=Math.min(minimumRadius,radius);maximumRadius=Math.max(maximumRadius,radius);
  assert.ok(Math.abs(dot(right,origin))<1e-10&&Math.abs(dot(up,origin))<1e-10);
  assert.ok(dot(forward,origin)>0);
  const displacement=following.map((row,i)=>row[0]-eye[i]);
  assert.ok(dot(displacement,right)>0,'Camera must move continuously toward screen-right');
 }
 for(let i=1;i<4;i++)assert.ok(Math.abs(initial[i][0]+final[i][0])<1e-10);
-console.log('Continuous nonzero motion through reading poses, monotone scroll transitions, right-to-left travel, and a half-circle about the fixed original cell center verified.');
+assert.ok(minimumRadius<2&&maximumRadius>3.39,'The route should approach the cusps and retreat between them');
+console.log('Monotone scroll transitions, right-to-left travel, inward views of the fixed original cell center, and deep cusp excursions verified.');

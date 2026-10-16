@@ -96,10 +96,26 @@ equation
 
     ⟨x,a⟩² − ⟨x,t⟩² = cosh²(r).
 
-Substituting a camera ray gives a quadratic in tanh(s). Both roots are
-checked against the next face crossing, and the nearest positive hit is
-used. Every edge joins two ideal endpoints, so there are no finite caps.
-The intersection calculation is analytic.
+For numerical evaluation, the renderer constructs an orthonormal basis
+n₁, n₂ of the spacelike plane orthogonal to a and t. On the hyperboloid,
+the same tube equation is
+
+    ⟨x,n₁⟩² + ⟨x,n₂⟩² = sinh²(r).
+
+This sum of squares avoids subtracting large, nearly equal longitudinal
+terms near a cusp. The basis is computed in double precision and stored in
+the GPU texture. For a camera ray with initial point p and tangent d, let
+P = (⟨p,n₁⟩, ⟨p,n₂⟩), D = (⟨d,n₁⟩, ⟨d,n₂⟩), and ρ = sinh(r).
+Substitution gives the quadratic in q = tanh(s):
+
+    (|D|² + ρ²)q² + 2(P·D)q + |P|² − ρ² = 0.
+
+Both roots are checked against the next face crossing, and the nearest
+positive hit is used. Every edge joins two ideal endpoints, so there are
+no finite caps. The intersection calculation is analytic.
+`tests/tube-stability.mjs` compares the equations against independent
+intersections and known transverse rays, including float32 arithmetic
+near cusps and near tangency.
 
 The tube radius is 0.025 in curvature −1 units. The page uses muted neutral
 beams, narrow warm reflections, and a charcoal background. The material's
@@ -110,32 +126,50 @@ and beam thickness are presentation choices.
 
 ## Camera and section transitions
 
-The camera follows one circle at hyperbolic distance 2.54 from the finite
-center of a fixed, unfolded cell and looks inward toward that center.
-Its initial radial direction is (1, 0, φ)/√(φ + 2). At the opening stop,
-screen up is (φ, 0, −1)/√(φ + 2), and screen right is the positive y axis.
-This makes an ideal vertex upright above a horizontal pair of ideal ends.
+The camera follows a planar route around the center of one fixed, unfolded
+cell. It always looks inward toward that original center, including while
+its representative crosses into neighboring cells. The four reading stops
+have logical phases 0, π/4, π/2, and 3π/4. Their positions are chosen from
+the cell geometry:
 
-The orbit plane is tilted by 9° toward the initial up direction. A constant
-roll compensation preserves the intended opening orientation. The small
-tilt brings the camera close to an ideal end on the way to the Background
-stop, with that ideal point behind the camera. Its maximum Busemann height
-is approximately 2.232, normalized by the ideal vertex's time coordinate 1.
-The numerical path check samples a minimum
-edge-axis distance of about 0.09768, compared with the tube radius 0.025.
+- The opening stop is at hyperbolic radius 2.54 in direction
+  (1, 0, φ)/√(φ + 2), perpendicular to a pentagonal face.
+- Background is at radius 3.4 in the direction of ideal vertex 7,
+  (1, 1, 1)/√3.
+- Currently is at radius 3.2 in the direction of ideal vertex 19,
+  (1/φ, φ, 0)/√3.
+- Elsewhere is antipodal to the opening stop, at radius 2.54.
 
-`camera-path.js` defines both the camera frames and reading phases. The four
-logical phases are 0, π/4, π/2, and 3π/4, mapped to physical orbital angles
-0, π/3, 2π/3, and π: a half-circle. The unfolded path remains continuous
-when its representative changes cells. Reverse navigation retraces the same
-path. The phase direction makes text enter from the right and exit to the
-left.
+At both middle stops, the selected ideal vertex lies exactly behind the
+camera. Its Busemann height relative to the horosphere through the original
+cell center equals the corresponding reading radius. The opening and final
+frames orient their pentagons upright; the middle frames make their
+triangular configurations readable.
+
+`camera-path.js` joins the anchors with three quadratic Bézier arcs in
+Klein coordinates. Each control point has Euclidean norm 0.88 and lies in
+the direction of the sum of its adjacent anchors. The route therefore
+retreats toward the center between the deeper cusp views, passing inside
+the connecting edge. Its planarity and sampled clearance from the edge
+tubes are checked numerically. Across 18,001 sampled poses, the minimum
+edge-axis distance is approximately 0.08128, versus the tube radius 0.025.
+
+Each leg is reparameterized using a hyperbolic arclength table sampled at
+8192 intervals. Equal phase increments then move the eye approximately
+equal hyperbolic distances along that leg. Roll angles of 18°, 30°, −30°,
+and 18° at the four stops are interpolated along the legs. Reverse
+navigation retraces the same route. Text enters from the right and exits
+to the left.
 
 Each wheel gesture, swipe, tap, or navigation control selects one section.
-The scroll coordinate moves between section centers over 1.45 seconds using
-quintic smootherstep. A monotone cubic interpolation maps that coordinate
-to camera phase; both background and text use the same phase without
-additional lag. The camera rests at a reading pose between gestures.
+A transition between adjacent section centers takes 1.45 seconds and uses
+quintic smootherstep. Jumps across several sections ease through each leg
+separately, taking 1.45 seconds per leg and reaching zero velocity and
+acceleration at each intervening reading stop. A monotone cubic
+interpolation maps the scroll coordinate to camera phase; background and
+text use the same phase without additional lag. The camera rests between
+gestures.
+
 Pause background freezes its pose while text navigation selects centered
 stills. Reduced-motion preferences similarly use immediate section changes
 and a static background. Resume background synchronizes with the selected
@@ -152,8 +186,11 @@ rectangle; viewport and font changes recalibrate that rectangle.
 
 The plane is transparent except for its HTML text. It is drawn as a CSS
 projective overlay, with opacity reduced as its reading pose leaves view.
-These are selected lifts in the universal cover: the page does not generate
-deck-translated copies of the text or depth-test it against scaffold beams.
+A separate quintic fade hides the whole plane smoothly before its nearest
+corner reaches the camera's near clip, avoiding abrupt disappearance when
+the camera crosses a stationary text plane. These are selected lifts in the
+universal cover: the page does not generate deck-translated copies of the
+text or depth-test it against scaffold beams.
 The text is therefore a presentation layer, not additional quotient-invariant
 geometric scenery. Ordinary HTML flow remains available when the text will
 not fit the viewport, and a graphics failure does not remove the content.
@@ -218,6 +255,7 @@ Check the current geometry and browser-independent navigation/projection:
     python tools/dodecahedral_algebra.py
     python tests/dodecahedral_exact.py
     node --experimental-default-type=module tests/dodecahedral.mjs
+    node --experimental-default-type=module tests/tube-stability.mjs
     node --experimental-default-type=module tests/scroll-choreography.mjs
     node --experimental-default-type=module tests/projection.mjs
     node --experimental-default-type=module tests/section-navigation.mjs
@@ -225,8 +263,9 @@ Check the current geometry and browser-independent navigation/projection:
 
 The dodecahedral ray tests exercise paired-cell crossings and independent
 tube intersections in both directions along an edge. They also check
-clearance from the scaffold along the camera arc and the geometric
-visibility of several ideal endpoints at each reading stop. Geometric
+clearance from the scaffold along the camera route, approximately uniform
+hyperbolic speed within each leg, and the geometric visibility of several
+ideal endpoints at each reading stop. Geometric
 visibility is a field-of-view check; it does not promise a particular
 contrast or exclude occlusion by another beam.
 

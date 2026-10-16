@@ -23,7 +23,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  if(!sections.length)return null;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)'),wheel=new WheelIntent();
  const listeners=[];
- let active=0,moving=false,animation=0,resizeFrame=0,touch=null,multiTouch=false,ignoreClickUntil=0,destroyed=false;
+ let active=0,moving=false,animation=0,resizeFrame=0,touch=null,multiTouch=false,ignoreClickUntil=0,pointerFocusUntil=0,destroyed=false;
  const oldRestoration=history.scrollRestoration;
  history.scrollRestoration='manual';
  const position=i=>{
@@ -53,16 +53,23 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  function goTo(index,{immediate=false,updateHash=true,interrupt=false}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
   stop();active=clamp(index,0,sections.length-1);
-  const start=scrollY,end=position(active),duration=immediate||reduced.matches?0:1450;
+  const start=scrollY,end=position(active),legDuration=immediate||reduced.matches?0:1450;
+  const direction=Math.sign(end-start);
+  // Each camera leg meets its neighbors with zero velocity and acceleration.
+  // A long jump must therefore ease separately through every reading anchor.
+  // Browser scrolling can round a fractional anchor to a device pixel.
+  const anchors=sections.map((_,i)=>position(i)).filter(y=>direction*(y-start)>.75&&direction*(end-y)>.75).sort((a,b)=>direction*(a-b));
+  const stops=[start,...anchors,end],duration=legDuration*(stops.length-1);
   if(updateHash)history.replaceState(history.state,'',hashFor(active));
   onChange(active);document.dispatchEvent(new CustomEvent('sectionchange',{detail:{index:active}}));
-  if(!duration||Math.abs(end-start)<.25){window.scrollTo(0,end);updateControls();return true;}
+  if(!duration||Math.abs(end-start)<.75){window.scrollTo(0,end);updateControls();return true;}
   moving=true;updateControls();const began=performance.now();
   function step(now){
    if(destroyed||!isEnabled()){stop();updateControls();return;}
-   const t=Math.min(1,(now-began)/duration),ease=t*t*t*(t*(t*6-15)+10);
-   window.scrollTo(0,start+(end-start)*ease);
-   if(t<1)animation=requestAnimationFrame(step);
+   const elapsed=Math.min(duration,now-began),leg=Math.min(stops.length-2,Math.floor(elapsed/legDuration));
+   const t=Math.min(1,(elapsed-leg*legDuration)/legDuration),ease=t*t*t*(t*(t*6-15)+10);
+   window.scrollTo(0,stops[leg]+(stops[leg+1]-stops[leg])*ease);
+   if(elapsed<duration)animation=requestAnimationFrame(step);
    else{moving=false;animation=0;updateControls();}
   }
   animation=requestAnimationFrame(step);return true;
@@ -105,6 +112,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
   }
  },{passive:false});
  on(window,'touchcancel',()=>{touch=null;multiTouch=false;ignoreClickUntil=performance.now()+450;});
+ on(document,'pointerdown',()=>{pointerFocusUntil=performance.now()+500;},{passive:true});
  on(document,'click',event=>{
   if(!isEnabled()||performance.now()<ignoreClickUntil||event.defaultPrevented||event.button!==0||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
   const link=event.target.closest('a[href]');
@@ -120,6 +128,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
   goTo(active+1);
  });
  on(window,'keydown',event=>{
+  pointerFocusUntil=0;
   if(!isEnabled()||event.defaultPrevented||event.target.closest('button,input,select,textarea,summary,[contenteditable="true"]')||event.altKey||event.ctrlKey||event.metaKey)return;
   if(event.shiftKey&&event.key!==' ')return;
   const direction={ArrowDown:1,ArrowRight:1,PageDown:1,' ':event.shiftKey?-1:1,ArrowUp:-1,ArrowLeft:-1,PageUp:-1}[event.key];
@@ -128,7 +137,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
   goTo(event.key==='Home'?0:event.key==='End'?sections.length-1:active+direction);
  });
  on(document,'focusin',event=>{
-  if(!isEnabled())return;
+  if(!isEnabled()||performance.now()<pointerFocusUntil)return;
   const section=event.target.closest('main > section');
   const index=section?sections.indexOf(section):event.target.closest('header')?0:event.target.closest('footer')?sections.length-1:-1;
   if(index>=0&&index!==active)goTo(index,{immediate:true,interrupt:true});

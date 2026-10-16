@@ -20,7 +20,19 @@ export function beamData(domain){
  return domain.edges.map(([i,j])=>{
   const u=domain.vertices[i],v=domain.vertices[j],scale=Math.sqrt(-2*dot(u,v));
   if(!(scale>0))throw Error('Ideal edge endpoints must be distinct null vectors');
-  return {a:u.map((x,k)=>(x+v[k])/scale),t:u.map((x,k)=>(v[k]-x)/scale)};
+  const a=u.map((x,k)=>(x+v[k])/scale),t=u.map((x,k)=>(v[k]-x)/scale);
+  // The geodesic's orthogonal complement is a positive definite two-plane.
+  // Build its basis in double precision; the shader can then sum squares
+  // instead of subtracting two large nearly equal longitudinal terms.
+  const candidates=[1,2,3].map(axis=>{
+   const e=[0,0,0,0];e[axis]=1;
+   return e.map((x,k)=>x+dot(e,a)*a[k]-dot(e,t)*t[k]);
+  });
+  const unit=v=>v.map(x=>x/Math.sqrt(dot(v,v)));
+  const longest=vectors=>vectors.reduce((best,v)=>dot(v,v)>dot(best,best)?v:best);
+  const n1=unit(longest(candidates));
+  const n2=unit(longest(candidates.map(v=>v.map((x,k)=>x-dot(v,n1)*n1[k]))));
+  return {a,t,n1,n2};
  });
 }
 
@@ -35,9 +47,9 @@ export function packScene(data){
    texels.set(domain.planes[i],offset+4*4);
    texels[offset+7*4]=domain.otherFaces[i];texels[offset+7*4+1]=domain.neighbors[i];
   }
-  beamData(domain).forEach(({a,t},i)=>{
+  beamData(domain).forEach(({n1,n2},i)=>{
    const offset=(cell*stride+i)*8*4;
-   texels.set(a,offset+5*4);texels.set(t,offset+6*4);
+   texels.set(n1,offset+5*4);texels.set(n2,offset+6*4);
   });
  });
  return {texels,width:8,height:data.cells.length*stride,fragment:fragmentShader(faces,edges,stride)};
@@ -69,7 +81,7 @@ void main(){
  vec2 uv=(2.*gl_FragCoord.xy-resolution)/resolution.y;
  vec4 p=camera[0],d=camera*vec4(0.,normalize(vec3(uv*.82,1.)));
  vec3 background=vec3(.0035,.0033,.0031);
- int cell=cameraCell,entry=-1;float total=0.;float cr=cosh(beamRadius),cr2=cr*cr;
+ int cell=cameraCell,entry=-1;float total=0.;float sr=sinh(beamRadius),sr2=sr*sr;
  for(int step=0;step<240;step++){
   if(step>=maxSteps)break;
   float qFace=1.;int face=-1;
@@ -81,9 +93,9 @@ void main(){
   float qHit=qFace;int object=-1;
   // An ideal-to-ideal edge is a complete geodesic, with no finite caps.
   for(int edge=0;edge<${edges};edge++){
-   vec4 a=datum(cell,edge,5),t=datum(cell,edge,6);
-   float pa=ld(p,a),pt=ld(p,t),da=ld(d,a),dt=ld(d,t);
-   vec2 r=roots(da*da-dt*dt+cr2,2.*(pa*da-pt*dt),pa*pa-pt*pt-cr2);
+   vec4 n1=datum(cell,edge,5),n2=datum(cell,edge,6);
+   vec2 P=vec2(ld(p,n1),ld(p,n2)),D=vec2(ld(d,n1),ld(d,n2));
+   vec2 r=roots(dot(D,D)+sr2,2.*dot(P,D),dot(P,P)-sr2);
    for(int k=0;k<2;k++){
     float q=r[k];if(q>1e-5&&q<qHit){qHit=q;object=edge;}
    }
@@ -91,8 +103,8 @@ void main(){
   if(object>=0){
    float c=inversesqrt(max(1.-qHit*qHit,1e-12));
    vec4 hit=c*(p+qHit*d),direction=c*(d+qHit*p);
-   vec4 a=datum(cell,object,5),t=datum(cell,object,6);
-   vec4 normal=cr2*hit+ld(hit,a)*a-ld(hit,t)*t;
+   vec4 n1=datum(cell,object,5),n2=datum(cell,object,6);
+   vec4 normal=ld(hit,n1)*n1+ld(hit,n2)*n2+sr2*hit;
    normal/=sqrt(max(ld(normal,normal),1e-12));
    float facing=clamp(abs(ld(direction,normal)),0.,1.);
    vec3 color=vec3(.32,.3136,.297);

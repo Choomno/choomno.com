@@ -1,4 +1,4 @@
-import {projectReadingPlane, readingPhase} from './projection.js';
+import {projectReadingPlaneWithDepth, readingPhase} from './projection.js';
 const copies = [...document.querySelectorAll('main > section .reading-copy')];
 let lastPhase = 0, sizes = [], enabled = false;
 
@@ -13,9 +13,11 @@ export function projectText(phase) {
  if (!enabled) return;
  copies.forEach((copy, i) => {
   const separation = Math.abs(phase - readingPhase(i));
-  const opacity = Math.max(0, 1 - (separation / (Math.PI / 4)) ** 4);
+  const phaseOpacity = Math.max(0, 1 - (separation / (Math.PI / 4)) ** 4);
   const {width, height} = sizes[i];
-  const matrix = opacity > .002 && projectReadingPlane(phase, readingPhase(i), width, height, innerWidth, innerHeight);
+  const projection = phaseOpacity > 0 && projectReadingPlaneWithDepth(phase, readingPhase(i), width, height, innerWidth, innerHeight);
+  const opacity = phaseOpacity * (projection?.nearOpacity ?? 0);
+  const matrix = opacity > 0 && projection?.matrix;
   copy.style.visibility = matrix ? 'visible' : 'hidden';
   copy.style.opacity = String(opacity);
   copy.inert = !matrix || separation > Math.PI / 8;
