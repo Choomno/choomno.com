@@ -70,9 +70,6 @@ Every page is a thin shell plus your content:
 |----------------------|------------|
 | `index.html`         | Home page |
 | `about.html`         | About page |
-| `projects.html`      | Projects page |
-| `blog/index.html`    | List of blog posts (you maintain it by hand) |
-| `blog/sample-post.html` | A worked example post — copy it to write new ones |
 | `_template.html`     | Blank page template — copy it to start any new page |
 | `header.html`        | Shared nav bar (edit once) |
 | `footer.html`        | Shared footer (edit once) |
@@ -91,16 +88,6 @@ Every page is a thin shell plus your content:
 **Add a new page.** Copy `_template.html` to e.g. `notes.html`, change the
 `<title>` and description, write your content in `<main>`, and add a link to it in
 `header.html` (the nav) if you want it there.
-
-**Write a blog post.**
-1. Copy `blog/sample-post.html` to `blog/my-post.html`.
-2. Change the `<title>` and `<h1>`, write the body, delete the demo sections you
-   don't need.
-3. Add a line to the list in `blog/index.html`:
-   ```html
-   <li><a href="/blog/my-post.html">My post title</a> <date>Month D, Year</date></li>
-   ```
-   (Optionally also add it under "Recent writing" on `index.html`.)
 
 **Change the nav or footer.** Edit `header.html` / `footer.html` once; the change
 shows on every page. Replace the placeholder name, tagline, email, and GitHub link.
@@ -198,7 +185,7 @@ Delete any example macros you don't want.
 
 This site deploys to GitHub Pages on the custom domain **choomno.com**. Because a
 custom domain serves at the domain root, the site's root-absolute paths
-(`/light.css`, `/blog/…`) work unchanged, and the repo can be named anything.
+(`/light.css`, `/about.html`) work unchanged, and the repo can be named anything.
 
 Repo files that make this work (already created):
 - **`CNAME`** — contains `choomno.com`; tells Pages the custom domain. Keep it
@@ -235,6 +222,6 @@ HTML. More powerful, but adds tooling; this site is deliberately buildless.
 
 - No jQuery, no `polyfill.io`, no analytics, no trackers — nothing loads except
   the stylesheet, your scripts, and MathJax from its CDN.
-- Paths are root-absolute (`/light.css`, `/blog/…`) so every page's `<head>` is
+- Paths are root-absolute (`/light.css`, `/about.html`) so every page's `<head>` is
   identical regardless of folder depth — at the cost of needing to be served from
   the site root (see §8).
