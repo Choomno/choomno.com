@@ -14,7 +14,7 @@ export function advance(frame,tet,step,data,ideal){
 }
 // Circle about the finite cell center, with the camera aimed inward.
 // Spatial rotation times a radial boost times a half-turn of the camera.
-export function cellTurn(angle,radius=.8){
+export function cellTurn(angle,radius=2.4){
  const c=Math.cos(angle+Math.PI/4),s=Math.sin(angle+Math.PI/4);
  const ch=Math.cosh(radius),sh=Math.sinh(radius);
  return [[ch,0,0,-sh],[sh*s,-c,0,-ch*s],[0,0,1,0],[sh*c,s,0,-ch*c]];

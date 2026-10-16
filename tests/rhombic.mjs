@@ -57,7 +57,7 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
 console.log(`Rhombic checks passed: ${crossings} camera crossings; ${intersectionChecks} independent tube intersections; negative ray extensions excluded.`);
 
 // Circular camera orbit about the finite cell center, always aimed inward.
-const origin=[1,0,0,0],rho=.8;
+const origin=[1,0,0,0],rho=2.4;
 for(let i=0;i<=720;i++){
  const f=cellTurn(i*Math.PI/360,rho),p=f.map(r=>r[0]),forward=f.map(r=>r[3]);
  close(-dot(p,origin),Math.cosh(rho),1e-12);
@@ -67,7 +67,8 @@ for(let i=0;i<=720;i++){
  centerOnRay.forEach((v,j)=>close(v,origin[j],1e-12));
  for(let j=0;j<4;j++)for(let k=0;k<4;k++)close(dot(f.map(r=>r[j]),f.map(r=>r[k])),j===k?(j===0?-1:1):0,1e-12);
  close(f[2][2],1,1e-12);
- for(const n of data.planes)assert.ok(dot(p,n)<0);
+ const folded=advance(identity(),0,f,data);
+ for(const n of data.planes)assert.ok(dot(folded.frame.map(r=>r[0]),n)<1e-8);
 }
 const start=cellTurn(0),end=cellTurn(2*Math.PI);
 start.flat().forEach((v,i)=>close(v,end.flat()[i],1e-12));
