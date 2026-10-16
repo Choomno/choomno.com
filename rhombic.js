@@ -36,7 +36,7 @@ uniform vec2 resolution;
 uniform int maxSteps;
 uniform bool cuspColors;
 out vec4 pixel;
-const float radius=.047;
+const float radius=.028;
 float ld(vec4 a,vec4 b){return dot(a.yzw,b.yzw)-a.x*b.x;}
 vec4 datum(int index,int slot){return texelFetch(manifold,ivec2(slot,index),0);}
 mat4 pairing(int i){return mat4(datum(i,0),datum(i,1),datum(i,2),datum(i,3));}
@@ -52,6 +52,7 @@ vec2 roots(float a,float b,float c){
 void main(){
  vec2 uv=(2.*gl_FragCoord.xy-resolution)/resolution.y;
  vec4 p=camera[0],d=camera*vec4(0.,normalize(vec3(uv*.82,1.)));
+ vec3 background=mix(vec3(.009,.020,.031),vec3(.015,.038,.048),exp(-.7*dot(uv,uv)));
  int entry=-1;float total=0.;float cr=cosh(radius),cr2=cr*cr;
  for(int step=0;step<160;step++){
   if(step>=maxSteps)break;
@@ -85,19 +86,21 @@ void main(){
    vec4 normal=cap?cr*hit-a:cr2*hit+ld(hit,a)*a-ld(hit,t)*t;
    normal/=sqrt(max(ld(normal,normal),1e-12));
    float facing=clamp(abs(ld(direction,normal)),0.,1.);
-   vec3 color=vec3(.68,.70,.73);
+   vec3 color=vec3(.16,.56,.62);
    if(cuspColors&&!cap){
     int cusp=int(datum(object,7).y+.5);
-    vec3 tint=cusp==0?vec3(.92,.12,.09):cusp==1?vec3(.12,.78,.20):vec3(.16,.31,1.);
+    vec3 tint=cusp==0?vec3(.95,.49,.32):cusp==1?vec3(.25,.79,.66):vec3(.38,.58,.98);
     // Tint tends to the ideal endpoint's cusp color, without introducing a finite boundary.
     float along=asinh(max(0.,ld(hit,t))/cr);
     color=mix(color,tint,.85*(1.-exp(-along*.7)));
    }
    total+=distanceOf(qHit);
-   float light=.12+.85*pow(facing,.65);
-   vec3 lit=color*light+vec3(.22)*pow(facing,32.);
-   lit/=1.+.18*pow(sinh(min(total,12.)),2.);
-   pixel=vec4(pow(lit,vec3(1./2.2)),1.);return;
+   float rim=pow(1.-facing,2.5);
+   vec3 lit=color*(.38+.52*facing)+vec3(.46,.85,.89)*rim*.38;
+   lit+=vec3(.76,.93,.96)*.38*pow(facing,48.);
+   float visibility=1./(1.+.22*pow(sinh(min(total,12.)),2.));
+   vec3 mapped=vec3(1.)-exp(-lit*1.35);
+   pixel=vec4(pow(mix(background,mapped,visibility),vec3(1./2.2)),1.);return;
   }
   if(face<0||qFace>=.999999||total>24.)break;
   float c=inversesqrt(max(1.-qFace*qFace,1e-12));
@@ -106,5 +109,5 @@ void main(){
   p/=sqrt(max(-ld(p,p),1e-12));d+=ld(p,d)*p;d/=sqrt(max(ld(d,d),1e-12));
   entry=int(datum(face,7).x+.5);total+=distanceOf(qFace);
  }
- pixel=vec4(0.,0.,0.,1.);
+ pixel=vec4(pow(background,vec3(1./2.2)),1.);
 }`;

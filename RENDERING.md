@@ -2,7 +2,7 @@
 
 The homepage renders only the complete hyperbolic limit of the Borromean rings
 complement. The selected reference is [Not Knot, 13:29](https://www.youtube.com/watch?v=IrlaVaATiOY&t=809).
-The visible silver scaffold is the thickened edge skeleton of a rhombic
+The visible teal scaffold is the thickened edge skeleton of a rhombic
 dodecahedral fundamental domain. The deleted ring components lie at infinity:
 six ideal vertices identify in pairs to give the three cusps. There are no
 finite ring axes, cone deformations, or opaque cusp cross sections in the display.
@@ -66,14 +66,14 @@ satisfies
     ⟨x,a⟩² − ⟨x,t⟩² = cosh²(r),   ⟨x,t⟩ ≥ 0.
 
 Substitution of γ gives a quadratic in tanh(s). Radius-r balls at the eight
-finite vertices join the incident beams. The radius is 0.047 in curvature −1
+finite vertices join the incident beams. The radius is 0.028 in curvature −1
 units. Geodesics and intersections are analytic; no Euclidean perspective
 substitute or numerical ODE integrator is used.
 
 The optional Cusp colors control tints a beam toward the cusp of its ideal
 endpoint. It labels the ideal ends of the scaffold; it does not draw an axis
-or add a boundary at a finite distance. Silver is the default, matching the
-complete-limit frame of the film. Shading and distance attenuation are
+or add a boundary at a finite distance. The default uses a restrained teal material, fine rim highlights, and a deep
+blue background, giving the geometry its own visual identity. Shading and distance attenuation are
 presentation choices rather than a global illumination calculation.
 
 ## Numerical rendering limits

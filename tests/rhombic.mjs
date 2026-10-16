@@ -38,7 +38,7 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
  let n=[0,1,0,0];n=add(add(n,scale(a,dot(n,a))),scale(t,-dot(n,t)));
  if(dot(n,n)<1e-8){n=[0,0,1,0];n=add(add(n,scale(a,dot(n,a))),scale(t,-dot(n,t)));}
  n=scale(n,1/Math.sqrt(dot(n,n)));
- const center=point(a,t,s0),R=.22,r=.047;
+ const center=point(a,t,s0),R=.22,r=.028;
  const p=add(scale(center,Math.cosh(R)),scale(n,Math.sinh(R)));
  const d=add(scale(center,-Math.sinh(R)),scale(n,-Math.cosh(R)));
  close(dot(p,p),-1);close(dot(d,d),1);close(dot(p,d),0);

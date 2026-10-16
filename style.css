@@ -4,3 +4,12 @@
 .intro>p:not(.eyebrow){max-width:620px}
 
 .cusp-toggle input{width:auto;accent-color:#415c64}.viewer{background:#000}.controls{gap:16px;flex-wrap:wrap}
+
+/* Contemporary material treatment for the intrinsic viewport. */
+.viewer{background:#081923;border-radius:18px;border:1px solid #d3dddf;box-shadow:0 16px 48px -32px #142f3866}
+.viewer-label{top:20px;left:20px;background:#0b2028b8;border:1px solid #b4e5ec20;border-radius:24px;padding:9px 14px;letter-spacing:.13em;color:#d8eff1;backdrop-filter:blur(12px)}
+.dot{background:#70d1c5;box-shadow:0 0 10px #70d1c559}.viewer-label .model{color:#8cb3bd}
+.hint{bottom:18px;border:1px solid #b4e5ec20;border-radius:24px;background:#0b2028b8;color:#afced4;padding:8px 15px;backdrop-filter:blur(12px)}
+.controls{padding:18px 0;gap:18px;color:#526267}.controls button,.controls select{border-radius:22px;padding:8px 14px;border-color:#d0d9d9}.controls button:hover,.controls select:hover{background:#e4eeeb}.controls input{accent-color:#258d8c}
+#play{background:#183e47;color:#e4f5f4;border-color:#183e47}.controls #play:hover{background:#24535c}
+@media(max-width:650px){.viewer{border-radius:12px}.viewer-label{top:14px;left:14px;font-size:8px}.hint{font-size:9px}.controls{gap:12px}}

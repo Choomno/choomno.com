@@ -30,7 +30,7 @@ async function main(){
  if(keys.has('ArrowLeft')||keys.has('ArrowRight'))move(rotation(1,3,dt*(keys.has('ArrowLeft')?1:-1)));
  if(keys.has('ArrowUp')||keys.has('ArrowDown'))move(rotation(2,3,dt*(keys.has('ArrowDown')?1:-1)));
  if(!dirty)return;dirty=false;
- const rect=canvas.getBoundingClientRect(),quality=Number(detail.value),ratio=Math.min(devicePixelRatio||1,quality);const w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
+ const rect=canvas.getBoundingClientRect(),quality=Number(detail.value),ratio=quality;const w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
  gl.uniformMatrix4fv(uCamera,false,new Float32Array(frame[0].flatMap((_,i)=>frame.map(row=>row[i]))));gl.uniform1i(uColors,document.querySelector('#cusp-colors').checked?1:0);gl.uniform2f(uRes,w,h);gl.uniform1i(uSteps,quality<1?48:quality<1.5?96:160);gl.drawArrays(gl.TRIANGLES,0,3);
  }
  canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});});canvas.addEventListener('pointermove',e=>{if(!drag)return;move(multiply(rotation(1,3,(e.clientX-drag[0])*.004),rotation(2,3,(e.clientY-drag[1])*.004)));drag=[e.clientX,e.clientY];});for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,()=>drag=null);
