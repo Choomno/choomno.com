@@ -45,7 +45,7 @@ For a face normal n, its intersection parameter is
 
 Both point and tangent are transformed by the exact face pairing and tracing
 continues in the paired cell. Camera motion uses these same identifications. Automatic motion places the camera on a circular orbit about the finite center
-of a fundamental cell, at hyperbolic distance 0.55 from that center. The camera
+of a fundamental cell, at hyperbolic distance 0.8 from that center. The camera
 looks inward toward the center throughout the orbit and its vertical axis
 stays fixed. Each pose is a spatial rotation of a radial Lorentz boost followed
 by a half-turn of the camera. Manual navigation pauses the orbit; Resume orbit
