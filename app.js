@@ -1,3 +1,4 @@
+import {projectText} from './text-sprites.js?v=2';
 import {phaseAtScroll} from './scroll-choreography.js';
 import {identity,advance,fragment,beamData,cellTurn} from './rhombic.js';
 const canvas=document.querySelector('#space'),fallback=document.querySelector('#fallback');
@@ -25,7 +26,7 @@ async function main(){
  const play=document.querySelector('#play'),detail=document.querySelector('#detail');
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  let running=!reduced.matches,phase=0,targetPhase=0,frame=identity(),tet=0,dirty=true,last=0;
- function setOrbit(){({frame,tet}=advance(identity(),0,cellTurn(phase),data));dirty=true;}
+ function setOrbit(){projectText(phase);({frame,tet}=advance(identity(),0,cellTurn(phase),data));dirty=true;}
  function updateScroll(){
   const selectors=['#background','.current','.elsewhere'];
   const landmarks=selectors.map((selector,i)=>{
@@ -54,7 +55,7 @@ async function main(){
  window.addEventListener('scroll',updateScroll,{passive:true});
  play.addEventListener('click',()=>{running=!running;state();});
  detail.addEventListener('change',()=>dirty=true);
- new ResizeObserver(()=>{updateScroll();dirty=true;}).observe(canvas);
+ new ResizeObserver(()=>{updateScroll();projectText(phase);dirty=true;}).observe(canvas);
  new ResizeObserver(updateScroll).observe(document.body);
  reduced.addEventListener('change',()=>{running=!reduced.matches;state();});
  document.addEventListener('visibilitychange',()=>{updateScroll();dirty=true;});
