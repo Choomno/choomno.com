@@ -65,6 +65,8 @@ function draw(time){
  if(renderer&&dirty){dirty=false;renderer(phase,motionRendering);}
 }
 async function main(){
+ const yearLabel=document.querySelector('#copyright-year');
+ if(yearLabel)yearLabel.textContent=String(new Date().getFullYear());
  await document.fonts.ready;
  initTextSprites();
  navigation=initSectionNavigation({isEnabled:()=>document.documentElement.classList.contains('projected-text'),onChange:()=>updateText(),onProgress:value=>{targetPhase=readingPhase(value);}});
