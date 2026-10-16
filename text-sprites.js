@@ -10,12 +10,12 @@ function solve(a){
  }return a.map(row=>row[8]);
 }
 export function projectText(phase){
- const camera=cellTurn(phase);
+ const camera=cellTurn(-phase);
  copies.forEach((copy,i)=>{
   const separation=Math.abs(phase-i*Math.PI/4);
   if(separation>=Math.PI/4){copy.style.visibility='hidden';return;}
   copy.style.opacity=String(Math.max(0,1-Math.pow(separation/(Math.PI/4),4)));
-  const width=copy.offsetWidth,height=copy.offsetHeight,station=cellTurn(i*Math.PI/4);
+  const width=copy.offsetWidth,height=copy.offsetHeight,station=cellTurn(-i*Math.PI/4);
   const z=.8,half=z*.82*Math.min(width,innerWidth*.88)/innerHeight,vertical=half*height/width;
   const corners=[[-half,vertical],[half,vertical],[half,-vertical],[-half,-vertical]];
   const screen=corners.map(([x,y])=>{

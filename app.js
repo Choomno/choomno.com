@@ -1,4 +1,4 @@
-import {projectText} from './text-sprites.js?v=2';
+import {projectText} from './text-sprites.js?v=right-to-left';
 import {phaseAtScroll} from './scroll-choreography.js';
 import {identity,advance,fragment,beamData,cellTurn} from './rhombic.js';
 const canvas=document.querySelector('#space'),fallback=document.querySelector('#fallback');
@@ -26,17 +26,19 @@ async function main(){
  const play=document.querySelector('#play'),detail=document.querySelector('#detail');
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  let running=!reduced.matches,phase=0,targetPhase=0,frame=identity(),tet=0,dirty=true,last=0;
- function setOrbit(){projectText(phase);({frame,tet}=advance(identity(),0,cellTurn(phase),data));dirty=true;}
+ function setOrbit(){projectText(phase);({frame,tet}=advance(identity(),0,cellTurn(-phase),data));dirty=true;}
  function updateScroll(){
+  const intro=document.querySelector('.intro').getBoundingClientRect();
+  const origin=window.scrollY+intro.top+intro.height/2-window.innerHeight/2;
   const selectors=['#background','.current','.elsewhere'];
   const landmarks=selectors.map((selector,i)=>{
    const rect=document.querySelector(selector).getBoundingClientRect();
-   return {y:window.scrollY+rect.top+rect.height/2-window.innerHeight/2,phase:(i+1)*Math.PI/4};
+   return {y:window.scrollY+rect.top+rect.height/2-window.innerHeight/2-origin,phase:(i+1)*Math.PI/4};
   });
-  targetPhase=phaseAtScroll(window.scrollY,landmarks);
+  targetPhase=phaseAtScroll(window.scrollY-origin,landmarks);
  }
  function state(){play.textContent=running?'Pause background':'Resume background';play.setAttribute('aria-pressed',String(running));}
- setOrbit();updateScroll();state();
+ updateScroll();phase=targetPhase;setOrbit();state();
  function draw(time){
   requestAnimationFrame(draw);const dt=Math.min((time-last)/1000,.1);last=time;
   if(document.hidden)return;
