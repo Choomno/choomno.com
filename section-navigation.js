@@ -52,7 +52,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   counter.setAttribute('aria-label',`Section ${active+1} of ${sections.length}`);
  }
  function stop(){cancelAnimationFrame(animation);animation=0;moving=false;}
- function goTo(index,{immediate=false,updateHash=true,interrupt=false}={}){
+ function goTo(index,{immediate=false,updateHash=true,interrupt=false,focusTarget=null}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
   const startIndex=active;
   stop();active=clamp(index,0,sections.length-1);
@@ -65,9 +65,11 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   const stops=[start,...anchors,end],duration=legDuration*(stops.length-1);
   const indices=stops.map((y,i)=>i===0?startIndex:sections.reduce((best,_,j)=>Math.abs(position(j)-y)<Math.abs(position(best)-y)?j:best,active));
   const report=value=>{progress=value;onProgress(value);};
+  // Let text projection make the destination plane interactive before focusing.
+  const focusDestination=()=>{if(focusTarget)requestAnimationFrame(()=>{if(!destroyed&&!moving&&active===index)focusTarget.focus({preventScroll:true});});};
   if(updateHash)history.replaceState(history.state,'',hashFor(active));
   onChange(active);document.dispatchEvent(new CustomEvent('sectionchange',{detail:{index:active}}));
-  if(!duration||startIndex===active||Math.abs(end-start)<.75){window.scrollTo(0,end);report(active);updateControls();return true;}
+  if(!duration||startIndex===active||Math.abs(end-start)<.75){window.scrollTo(0,end);report(active);updateControls();focusDestination();return true;}
   moving=true;updateControls();const began=performance.now();
   function step(now){
    if(destroyed||!isEnabled()){stop();updateControls();return;}
@@ -79,7 +81,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
    // position for the camera and text, whose nearby parallax is much larger.
    report(indices[leg]+(indices[leg+1]-indices[leg])*fraction);
    if(elapsed<duration)animation=requestAnimationFrame(step);
-   else{moving=false;animation=0;updateControls();}
+   else{moving=false;animation=0;updateControls();focusDestination();}
   }
   animation=requestAnimationFrame(step);return true;
  }
@@ -131,7 +133,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
    const url=new URL(link.href,location.href);
    if(url.origin===location.origin&&url.pathname===location.pathname&&url.search===location.search&&(url.hash||link.getAttribute('href')==='#')){
     const index=sectionForHash(url.hash);
-    if(index>=0){event.preventDefault();if(!moving){history.pushState(history.state,'',url.hash||'#');goTo(index,{updateHash:false});}}
+    if(index>=0){event.preventDefault();if(!moving){history.pushState(history.state,'',url.hash||'#');goTo(index,{immediate:link.getAttribute('data-rewind')!==null,updateHash:false,focusTarget:url.hash==='#name'?document.getElementById('name'):null});}}
    }
    return;
   }

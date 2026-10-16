@@ -23,6 +23,7 @@ class Target {
  getAttribute(key){return this.attributes[key]??null;}
  append(...children){this.children.push(...children);}
  remove(){}
+ focus(options){document.activeElement=this;this.focusOptions=options;document.dispatchEvent({type:'focusin',target:this});}
  closest(selector){
   if(selector==='main > section')return this.section||null;
   return selector.split(',').some(part=>part===this.kind||part==='a[href]'&&this.kind==='a')?this:null;
@@ -92,6 +93,18 @@ emit(doc,'pointerdown',{target:homeLink});emit(doc,'focusin',{target:new Target(
 assert.equal(nav.active,3,'pointer focus must not bypass a link transition');
 emit(doc,'click',{target:homeLink,button:0});
 for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'the header home link traverses every reverse leg');}
+advance(16);
+assert.equal(doc.activeElement,ids.name,'rewinding to the first slide transfers keyboard focus to the name');
+assert.equal(ids.name.focusOptions.preventScroll,true,'focus does not disturb the calibrated camera stop');
+nav.goTo(3,{immediate:true});
+const rewind=new Target('a');rewind.href=homeLink.href;rewind.attributes.href='#name';rewind.attributes['data-rewind']='';
+doc.activeElement=rewind;
+emit(doc,'click',{target:rewind,button:0});
+assert.equal(nav.active,0,'Rewind selects the opening slide');
+assert.equal(scrollY,0,'Rewind resets immediately without traversing the intervening slides');
+assert.equal(nav.progress,0,'Rewind immediately restores the calibrated camera pose');
+advance(16);
+assert.equal(doc.activeElement,ids.name,'Rewind restores keyboard focus to the name');
 nav.goTo(2,{immediate:true});
 
 // Starting a swipe over a link must not escape into native document scrolling.

@@ -29,6 +29,8 @@ h2{font:normal clamp(36px,4.5vw,58px)/1.15 "New Computer Modern",serif;letter-sp
 .elsewhere nav{display:flex;flex-direction:column;align-items:center;gap:15px;font-size:13px}
 .elsewhere a{text-decoration:none}
 .elsewhere a:hover{text-decoration:underline}
+.elsewhere .rewind{margin-top:8px;border:1px solid #ffffff28;border-radius:18px;padding:6px 16px;background:#191b18d9}
+.elsewhere .rewind:hover{background:#30312b;text-decoration:none}
 footer{position:absolute;bottom:0;left:6%;right:6%;display:flex;justify-content:space-between;align-items:flex-start;gap:25px;padding:28px 0 40px;font-size:10px;color:var(--muted)}
 header,footer{text-shadow:0 1px 4px #000}
 .background-settings summary{cursor:pointer;text-align:right}
