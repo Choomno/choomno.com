@@ -1,8 +1,8 @@
-import {cellTurn, dot} from './rhombic.js';
+import {dot} from './intrinsic.js';
+import {readingPhase,readingPose} from './camera-path.js';
+export {readingPhase,readingPose} from './camera-path.js';
 
 export const fieldScale = .82;
-export const readingPhase = index => index * Math.PI / 4;
-export const readingPose = phase => cellTurn(-phase);
 
 // A homogeneous plane in the hyperboloid's projective (Klein) model.
 // Its four corners have the same time coordinate and unit Lorentz norm.

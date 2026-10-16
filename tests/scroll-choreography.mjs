@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {phaseAtScroll} from '../scroll-choreography.js';
-import {cellTurn,dot,advance,identity} from '../rhombic.js';
+import {dot,advance,identity} from '../polyhedral.js';
+import {readingPose} from '../camera-path.js';
 import {readFile} from 'node:fs/promises';
 const marks=[{y:600,phase:Math.PI/4},{y:1300,phase:Math.PI/2},{y:2000,phase:3*Math.PI/4}];
 for(const m of marks)assert.equal(phaseAtScroll(m.y,marks),m.phase);
@@ -12,8 +13,10 @@ for(const m of marks.slice(0,-1)){
  assert.ok(left>0&&Math.abs(left-right)<1e-7);
 }
 let previous=0;for(let y=0;y<=2400;y++){const p=phaseAtScroll(y,marks);assert.ok(p>=previous);previous=p;}
-const data=JSON.parse(await readFile(new URL('../rhombic-data.json',import.meta.url),'utf8'));
-const f=cellTurn(phaseAtScroll(600,marks)),U=[1,1,0,0];
+const data=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
+// Calibrate the opening view to a canonical ideal vertex directly behind it.
+const phi=(1+Math.sqrt(5))/2;
+const f=readingPose(0),U=[1,phi/Math.sqrt(3),0,1/phi/Math.sqrt(3)];
 const sky=(frame,u)=>{const q=frame[0].map((_,j)=>dot(frame.map(r=>r[j]),u));return q.slice(1).map(x=>x/-q[0]);};
 for(const [i,v] of sky(f,U).entries())assert.ok(Math.abs(v-[0,0,-1][i])<1e-12);
 const folded=advance(identity(),0,f,data,U);

@@ -63,7 +63,7 @@ if(!scenario){
   uniformMatrix4fv:(name,transpose,values)=>{if(name==='camera')draws.push([...values]);},
  },{get(target,key){return key in target?target[key]:String(key).toUpperCase()===key?1:()=>{};}});
  canvas.getContext=()=>scenario==='no-webgl'?null:gl;
- const manifold=JSON.parse(await readFile(new URL('../rhombic-data.json',import.meta.url),'utf8'));
+ const manifold=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
  globalThis.fetch=async()=>({ok:scenario!=='data-failure',json:async()=>manifold});
  const nodes={'#space':canvas,'#play':play,'#detail':detail,'#background':sections[1],'.current':sections[2],'.elsewhere':sections[3]};
  doc.querySelector=selector=>nodes[selector];doc.querySelectorAll=selector=>selector==='main > section'?sections:copies;doc.getElementById=id=>ids[id];

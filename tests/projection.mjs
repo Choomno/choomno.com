@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {projectReadingPlane, readingPhase, readingPose} from '../projection.js';
-import {dot, advance, identity, apply} from '../rhombic.js';
-import {readFile} from 'node:fs/promises';
+import {dot, apply} from '../rhombic.js';
 const project = (m,x,y) => [(m[0]*x+m[4]*y+m[12])/(m[3]*x+m[7]*y+1),(m[1]*x+m[5]*y+m[13])/(m[3]*x+m[7]*y+1)];
 const close = (actual, expected, tolerance=1e-8) => assert.ok(Math.abs(actual-expected)<tolerance, `${actual} != ${expected}`);
 for (const [vw,vh,width,height] of [[1440,900,440,280],[625,780,440,300],[390,844,343.2,345],[320,568,281.6,390]]) {
@@ -37,10 +36,4 @@ for (const offset of [-.12, -.04, .07, .15]) {
  const actual=eye.map((v,i)=>(v+q*d[i])/Math.sqrt(1-q*q));
  actual.forEach((v,i)=>close(v,expected[i]));
 }
-const data=JSON.parse(await readFile(new URL('../rhombic-data.json',import.meta.url),'utf8'));
-// The reversed Background pose has +z, rather than +x, precisely behind it.
-const raw=readingPose(readingPhase(1)),ideal=[1,0,0,1];
-const sky=(frame,u)=>{const coordinates=frame[0].map((_,j)=>dot(frame.map(r=>r[j]),u));return coordinates.slice(1).map(x=>x/-coordinates[0]);};
-const folded=advance(identity(),0,raw,data,ideal);
-for(const [frame,u] of [[raw,ideal],[folded.frame,folded.ideal]]) sky(frame,u).forEach((v,i)=>close(v,[0,0,-1][i]));
-console.log('All four text planes match their centered reading rectangles across desktop/mobile sizes; right-to-left travel and rearward ideal endpoint verified.');
+console.log('All four text planes match their centered reading rectangles across desktop/mobile sizes; right-to-left travel verified.');

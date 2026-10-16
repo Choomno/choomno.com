@@ -1,0 +1,100 @@
+// Independent floating-point checks of the two-cell renderer and viewing path.
+// Algebraic/topological certification lives in dodecahedral_exact.py.
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {identity,advance,multiply,beamData,packScene} from '../polyhedral.js';
+import {translation,rotation} from '../intrinsic.js';
+import {readingPose,readingPhase,orbitRadius} from '../camera-path.js';
+const data=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
+const dot=(a,b)=>a.reduce((s,x,i)=>s+(i===0?-1:1)*x*b[i],0);
+const scale=(a,c)=>a.map(x=>x*c),add=(a,b)=>a.map((x,i)=>x+b[i]);
+const apply=(m,a)=>m.map(r=>r.reduce((s,x,i)=>s+x*a[i],0));
+const close=(a,b,tol=2e-8)=>assert.ok(Math.abs(a-b)<tol,`${a} differs from ${b}`);
+const point=(p,d,s)=>add(scale(p,Math.cosh(s)),scale(d,Math.sinh(s)));
+const beams=data.cells.map(beamData);
+assert.equal(data.cells.length,2);
+for(let cell=0;cell<2;cell++){
+ const domain=data.cells[cell];
+ assert.equal(domain.vertices.length,20);assert.equal(domain.faces.length,12);assert.equal(beams[cell].length,30);
+ for(const v of domain.vertices)close(dot(v,v),0);
+ for(const {a,t} of beams[cell]){close(dot(a,a),-1);close(dot(t,t),1);close(dot(a,t),0);}
+ for(let f=0;f<12;f++){
+  const target=data.cells[domain.neighbors[f]],other=domain.otherFaces[f],m=domain.transforms[f];
+  const cols=m[0].map((_,i)=>m.map(r=>r[i]));
+  for(let k=0;k<4;k++)for(let l=0;l<4;l++)close(dot(cols[k],cols[l]),k===l?(k===0?-1:1):0);
+  apply(m,domain.planes[f]).forEach((x,k)=>close(x,-target.planes[other][k]));
+  for(let i=0;i<5;i++){
+   const image=apply(m,domain.vertices[domain.faces[f][i]]),v=target.vertices[domain.vertexImages[f][i]];
+   image.forEach((x,k)=>close(x/image[0],v[k]/v[0]));
+  }
+ }
+}
+const packed=packScene(data);assert.equal(packed.width,8);assert.equal(packed.height,60);
+for(let cell=0;cell<2;cell++)for(let face=0;face<12;face++){
+ const offset=(cell*30+face)*8*4;
+ close(packed.texels[offset+28],data.cells[cell].otherFaces[face]);
+ close(packed.texels[offset+29],data.cells[cell].neighbors[face]);
+}
+let frame=identity(),cell=0,crossings=0,cellChanges=0;
+for(let i=0;i<7000;i++){
+ const step=multiply(rotation(1,3,.009*Math.sin(i*.013)),translation(.031));
+ const raw=multiply(frame,step),p0=raw.map(row=>row[0]);
+ crossings+=+data.cells[cell].planes.some(n=>dot(p0,n)>1e-8);
+ const folded=advance(frame,cell,step,data);cellChanges+=+(folded.cell!==cell);
+ ({frame,cell}=folded);
+ const p=frame.map(row=>row[0]);assert.ok(p.every(Number.isFinite)&&p[0]>0);
+ for(const n of data.cells[cell].planes)assert.ok(dot(p,n)<5e-8);
+ for(let k=0;k<4;k++)for(let l=0;l<4;l++)close(dot(frame.map(r=>r[k]),frame.map(r=>r[l])),k===l?(k===0?-1:1):0,5e-8);
+}
+assert.ok(crossings>30&&cellChanges>10,`Insufficient traversal: ${crossings} faces/${cellChanges} cell changes`);
+// Solve the tube intersection independently in exp(2s), not shader tanh(s).
+function referenceTube(p,d,a,t,r){
+ const pa=dot(p,a),pt=dot(p,t),da=dot(d,a),dt=dot(d,t);
+ const A=pa*pa-pt*pt,B=pa*da-pt*dt,C=da*da-dt*dt;
+ const aa=A+2*B+C,bb=2*(A-C)-4*Math.cosh(r)**2,cc=A-2*B+C;
+ const discriminant=bb*bb-4*aa*cc;if(discriminant<0)return [];
+ const ys=Math.abs(aa)<1e-12?[-cc/bb]:[(-bb-Math.sqrt(discriminant))/(2*aa),(-bb+Math.sqrt(discriminant))/(2*aa)];
+ return ys.filter(y=>y>1+1e-9).map(y=>.5*Math.log(y)).sort((a,b)=>a-b);
+}
+let intersectionChecks=0;
+for(const domainBeams of beams)for(const {a,t} of domainBeams)for(const along of [-2,-.5,.5,2]){
+ let n=[0,1,0,0];n=add(add(n,scale(a,dot(n,a))),scale(t,-dot(n,t)));
+ if(dot(n,n)<1e-8){n=[0,0,1,0];n=add(add(n,scale(a,dot(n,a))),scale(t,-dot(n,t)));}
+ n=scale(n,1/Math.sqrt(dot(n,n)));
+ const center=point(a,t,along),R=.22,r=.025;
+ const p=add(scale(center,Math.cosh(R)),scale(n,Math.sinh(R)));
+ const d=add(scale(center,-Math.sinh(R)),scale(n,-Math.cosh(R)));
+ close(dot(p,p),-1);close(dot(d,d),1);close(dot(p,d),0);
+ const hits=referenceTube(p,d,a,t,r);assert.ok(hits.length>=1);close(hits[0],R-r,2e-7);
+ const x=point(p,d,hits[0]),perp=add(add(x,scale(a,dot(x,a))),scale(t,-dot(x,t)));
+ close(dot(perp,perp),Math.sinh(r)**2);close(dot(x,perp),dot(perp,perp));
+ const normal=add(perp,scale(x,Math.sinh(r)**2));
+ close(dot(x,normal),0);close(dot(normal,normal),Math.sinh(r)**2*Math.cosh(r)**2);
+ intersectionChecks++;
+}
+// The entire slide arc, not a full 2π orbit, must stay clear of scaffolding.
+const origin=[1,0,0,0];let minClearance=Infinity;
+for(let i=0;i<=8000;i++){
+ const phase=readingPhase(3)*i/8000,raw=readingPose(phase),eye=raw.map(r=>r[0]),forward=raw.map(r=>r[3]);
+ close(-dot(eye,origin),Math.cosh(orbitRadius));
+ point(eye,forward,orbitRadius).forEach((x,k)=>close(x,origin[k]));
+ for(let k=0;k<4;k++)for(let l=0;l<4;l++)close(dot(raw.map(r=>r[k]),raw.map(r=>r[l])),k===l?(k===0?-1:1):0);
+ const folded=advance(identity(),0,raw,data),p=folded.frame.map(r=>r[0]);
+ for(const {a,t} of beams[folded.cell]){
+  const distance=Math.acosh(Math.sqrt(Math.max(1,dot(p,a)**2-dot(p,t)**2)));
+  minClearance=Math.min(minClearance,distance);
+ }
+}
+assert.ok(minClearance>.10,`Camera approaches beams too closely: ${minClearance}`);
+// Each centered still should contain distinct ideal endpoints. This checks
+// directions geometrically, not whether rasterized edges are bright enough.
+const endpointCounts=[];
+for(let stop=0;stop<4;stop++){
+ const frame=readingPose(readingPhase(stop));
+ const cols=frame[0].map((_,i)=>frame.map(row=>row[i]));
+ const projected=data.cells[0].vertices.map(v=>cols.slice(1).map(c=>dot(c,v))).filter(v=>v[2]>0)
+  .map(v=>[v[0]/v[2]/.82,v[1]/v[2]/.82]);
+ const count=projected.filter(([x,y])=>Math.abs(x)<390/844&&Math.abs(y)<1).length;
+ assert.ok(count>=3,`Only ${count} ideal endpoints in portrait still ${stop}`);endpointCounts.push(count);
+}
+console.log(`Dodecahedral checks passed: ${crossings} face crossings (${cellChanges} cell changes); ${intersectionChecks} independent all-ideal tube intersections; minimum sampled orbit clearance ${minClearance.toFixed(6)}; portrait ideal endpoints ${endpointCounts.join('/')}.`);
