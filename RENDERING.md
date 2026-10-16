@@ -2,7 +2,7 @@
 
 The homepage renders only the complete hyperbolic limit of the Borromean rings
 complement. The selected reference is [Not Knot, 13:29](https://www.youtube.com/watch?v=IrlaVaATiOY&t=809).
-The visible teal scaffold is the thickened edge skeleton of a rhombic
+The visible neutral scaffold is the thickened edge skeleton of a rhombic
 dodecahedral fundamental domain. The deleted ring components lie at infinity:
 six ideal vertices identify in pairs to give the three cusps. There are no
 finite ring axes, cone deformations, or opaque cusp cross sections in the display.
@@ -44,20 +44,13 @@ For a face normal n, its intersection parameter is
     tanh(s) = −⟨p,n⟩ / ⟨v,n⟩.
 
 Both point and tangent are transformed by the exact face pairing and tracing
-continues in the paired cell. Camera motion uses these same identifications. Automatic motion follows a circle on the horosphere t−z=1, keeping the ideal
-point U=(1,0,0,1) at the center of the image. For a=R cos θ, b=R sin θ and
-s=R²/2, the camera frame is the parabolic isometry
-
-    [1+s  a  b  -s  ]
-    [a    1  0  -a  ]
-    [b    0  1  -b  ]
-    [s    a  b  1-s ]
-
-It fixes U, and its forward column equals U minus the position column. The
-camera therefore moves along a horospherical circle with radius R=0.55 while
-looking directly toward U, without rolling the image. The whole default path
-lies within the fundamental domain. Manual navigation pauses the orbit;
-Resume orbit restores the centered circular view.
+continues in the paired cell. Camera motion uses these same identifications. Automatic motion fixes the observer at the center of the fundamental domain
+and turns the viewing direction in the xz-plane. The initial direction bisects
++x and +z, looking through a rhombic face. During a full turn the ideal vertices
+sweep across the image and pass outside the field of view, as in the reference
+sequence around 13:49–14:09. The camera does not roll or orbit on a horosphere.
+Manual navigation pauses automatic turning; Resume turn restores the reference
+viewing sequence.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
 ⟨a,u⟩=−1, and set t=u−a. A tube of hyperbolic radius r around that geodesic ray
@@ -66,14 +59,14 @@ satisfies
     ⟨x,a⟩² − ⟨x,t⟩² = cosh²(r),   ⟨x,t⟩ ≥ 0.
 
 Substitution of γ gives a quadratic in tanh(s). Radius-r balls at the eight
-finite vertices join the incident beams. The radius is 0.028 in curvature −1
+finite vertices join the incident beams. The radius is 0.035 in curvature −1
 units. Geodesics and intersections are analytic; no Euclidean perspective
 substitute or numerical ODE integrator is used.
 
 The optional Cusp colors control tints a beam toward the cusp of its ideal
 endpoint. It labels the ideal ends of the scaffold; it does not draw an axis
-or add a boundary at a finite distance. The default uses a restrained teal material, fine rim highlights, and a deep
-blue background, giving the geometry its own visual identity. Shading and distance attenuation are
+or add a boundary at a finite distance. The default uses a neutral ceramic material, narrow warm reflections, and a
+charcoal background. Depth attenuation keeps distant structure subordinate. Shading and distance attenuation are
 presentation choices rather than a global illumination calculation.
 
 ## Numerical rendering limits

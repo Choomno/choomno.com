@@ -1,7 +1,7 @@
 // Independent distance-parameter checks for the complete rhombic-cell renderer.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {identity,advance,rotation,translation,multiply,beamData,cuspOrbit} from '../rhombic.js';
+import {identity,advance,rotation,translation,multiply,beamData,cellTurn} from '../rhombic.js';
 const data=JSON.parse(await readFile(new URL('../rhombic-data.json',import.meta.url),'utf8'));
 const dot=(a,b)=>a.reduce((s,x,i)=>s+(i===0?-1:1)*x*b[i],0);
 const scale=(a,c)=>a.map(x=>x*c),add=(a,b)=>a.map((x,i)=>x+b[i]);
@@ -38,7 +38,7 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
  let n=[0,1,0,0];n=add(add(n,scale(a,dot(n,a))),scale(t,-dot(n,t)));
  if(dot(n,n)<1e-8){n=[0,0,1,0];n=add(add(n,scale(a,dot(n,a))),scale(t,-dot(n,t)));}
  n=scale(n,1/Math.sqrt(dot(n,n)));
- const center=point(a,t,s0),R=.22,r=.028;
+ const center=point(a,t,s0),R=.22,r=.035;
  const p=add(scale(center,Math.cosh(R)),scale(n,Math.sinh(R)));
  const d=add(scale(center,-Math.sinh(R)),scale(n,-Math.cosh(R)));
  close(dot(p,p),-1);close(dot(d,d),1);close(dot(p,d),0);
@@ -56,19 +56,17 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
 }
 console.log(`Rhombic checks passed: ${crossings} camera crossings; ${intersectionChecks} independent tube intersections; negative ray extensions excluded.`);
 
-// The camera circles on a horosphere, with the ideal endpoint at screen center.
-const U=[1,0,0,1],R=.55;
+// The reference sequence turns at a fixed eye; ideal points sweep past it.
+const U=[1,0,0,1],eye0=[1,0,0,0];
+let front=0,behind=0;
 for(let i=0;i<=720;i++){
- const f=cuspOrbit(i*Math.PI/360,R),p=f.map(r=>r[0]),forward=f.map(r=>r[3]);
- close(p[1]*p[1]+p[2]*p[2],R*R,1e-12);
- close(p[0]-p[3],1,1e-12);
- const target=map(f,U);target.forEach((v,j)=>close(v,U[j],1e-12));
- forward.forEach((v,j)=>close(v,U[j]-p[j],1e-12));
- for(let j=1;j<=2;j++)close(dot(f.map(r=>r[j]),U),0,1e-12);
+ const f=cellTurn(i*Math.PI/360),p=f.map(r=>r[0]);
+ p.forEach((v,j)=>close(v,eye0[j],1e-12));
  for(let j=0;j<4;j++)for(let k=0;k<4;k++)close(dot(f.map(r=>r[j]),f.map(r=>r[k])),j===k?(j===0?-1:1):0,1e-12);
- for(const n of data.planes)assert.ok(dot(p,n)<0);
+ const z=dot(f.map(r=>r[3]),U);front+=+(z>.9);behind+=+(z<-.9);
+ close(f[2][2],1,1e-12); // no roll: vertical direction stays fixed
 }
-const start=cuspOrbit(0),end=cuspOrbit(2*Math.PI);
+assert.ok(front>20&&behind>20);
+const start=cellTurn(0),end=cellTurn(2*Math.PI);
 start.flat().forEach((v,i)=>close(v,end.flat()[i],1e-12));
-assert.ok(Math.hypot(...start.map((r,i)=>r[0]-cuspOrbit(Math.PI)[i][0]))>1);
-console.log('Centered orbit passed: full circular camera path, constant horosphere, ideal endpoint fixed at screen center, no roll, Lorentz frames.');
+console.log('Reference turn passed: fixed eye, complete revolution, no roll, ideal vertices pass in front of and behind the viewing direction.');

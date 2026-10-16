@@ -13,3 +13,9 @@
 .controls{padding:18px 0;gap:18px;color:#526267}.controls button,.controls select{border-radius:22px;padding:8px 14px;border-color:#d0d9d9}.controls button:hover,.controls select:hover{background:#e4eeeb}.controls input{accent-color:#258d8c}
 #play{background:#183e47;color:#e4f5f4;border-color:#183e47}.controls #play:hover{background:#24535c}
 @media(max-width:650px){.viewer{border-radius:12px}.viewer-label{top:14px;left:14px;font-size:8px}.hint{font-size:9px}.controls{gap:12px}}
+
+/* Neutral viewport: distinct material, depth, and quieter interface chrome. */
+.viewer{background:#11100f;border:1px solid #d2cec6;border-radius:14px;box-shadow:0 22px 48px -38px #302a2470}
+.viewer-label{background:#161513b8;border-color:#ffffff14;color:#e3dfd6;border-radius:6px;letter-spacing:.12em}.dot{background:#c5a876;box-shadow:none}.viewer-label .model{color:#9b978e}
+.hint{background:#161513b8;border-color:#ffffff14;color:#b5b0a6;border-radius:6px}
+.controls #play{background:#292823;color:#f6f4ef;border-color:#292823}.controls #play:hover{background:#464238}.controls input{accent-color:#95805e}.controls button:hover,.controls select:hover{background:#e9e5dc}

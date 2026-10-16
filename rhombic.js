@@ -12,11 +12,11 @@ export function advance(frame,tet,step,data,ideal){
  }
  throw Error('Camera traversal exceeded 64 faces');
 }
-// A circular path on the horosphere t-z=1, aimed at U=(1,0,0,1).
-// Parabolic translations fix U; their forward camera column is U-position.
-export function cuspOrbit(angle,radius=.55){
- const a=radius*Math.cos(angle),b=radius*Math.sin(angle),s=radius*radius/2;
- return [[1+s,a,b,-s],[a,1,0,-a],[b,0,1,-b],[s,a,b,1-s]];
+// Turn at the center of the fundamental cell, sweeping past its ideal vertices.
+// The initial direction bisects +x and +z, looking through a rhombic face.
+export function cellTurn(angle){
+ const a=angle+Math.PI/4,c=Math.cos(a),s=Math.sin(a);
+ return [[1,0,0,0],[0,c,0,s],[0,0,1,0],[0,-s,0,c]];
 }
 export function beamData(data){
  const classes=[...new Set(data.vertexClasses.filter((_,i)=>data.ideal[i]))].sort();
@@ -36,7 +36,7 @@ uniform vec2 resolution;
 uniform int maxSteps;
 uniform bool cuspColors;
 out vec4 pixel;
-const float radius=.028;
+const float radius=.035;
 float ld(vec4 a,vec4 b){return dot(a.yzw,b.yzw)-a.x*b.x;}
 vec4 datum(int index,int slot){return texelFetch(manifold,ivec2(slot,index),0);}
 mat4 pairing(int i){return mat4(datum(i,0),datum(i,1),datum(i,2),datum(i,3));}
@@ -52,7 +52,7 @@ vec2 roots(float a,float b,float c){
 void main(){
  vec2 uv=(2.*gl_FragCoord.xy-resolution)/resolution.y;
  vec4 p=camera[0],d=camera*vec4(0.,normalize(vec3(uv*.82,1.)));
- vec3 background=mix(vec3(.009,.020,.031),vec3(.015,.038,.048),exp(-.7*dot(uv,uv)));
+ vec3 background=vec3(.0035,.0033,.0031);
  int entry=-1;float total=0.;float cr=cosh(radius),cr2=cr*cr;
  for(int step=0;step<160;step++){
   if(step>=maxSteps)break;
@@ -86,7 +86,7 @@ void main(){
    vec4 normal=cap?cr*hit-a:cr2*hit+ld(hit,a)*a-ld(hit,t)*t;
    normal/=sqrt(max(ld(normal,normal),1e-12));
    float facing=clamp(abs(ld(direction,normal)),0.,1.);
-   vec3 color=vec3(.16,.56,.62);
+   vec3 color=vec3(.69,.67,.63);
    if(cuspColors&&!cap){
     int cusp=int(datum(object,7).y+.5);
     vec3 tint=cusp==0?vec3(.95,.49,.32):cusp==1?vec3(.25,.79,.66):vec3(.38,.58,.98);
@@ -95,11 +95,13 @@ void main(){
     color=mix(color,tint,.85*(1.-exp(-along*.7)));
    }
    total+=distanceOf(qHit);
-   float rim=pow(1.-facing,2.5);
-   vec3 lit=color*(.38+.52*facing)+vec3(.46,.85,.89)*rim*.38;
-   lit+=vec3(.76,.93,.96)*.38*pow(facing,48.);
-   float visibility=1./(1.+.22*pow(sinh(min(total,12.)),2.));
-   vec3 mapped=vec3(1.)-exp(-lit*1.35);
+   float rim=pow(1.-facing,3.);
+   // Neutral ceramic body, a narrow warm reflection, and distance falloff.
+   vec3 lit=color*(.11+.72*sqrt(facing));
+   lit+=vec3(.96,.85,.66)*.20*pow(facing,70.);
+   lit+=vec3(.33,.29,.23)*rim*.12;
+   float visibility=1./(1.+.18*pow(sinh(min(total,12.)),2.));
+   vec3 mapped=vec3(1.)-exp(-lit*1.65);
    pixel=vec4(pow(mix(background,mapped,visibility),vec3(1./2.2)),1.);return;
   }
   if(face<0||qFace>=.999999||total>24.)break;
