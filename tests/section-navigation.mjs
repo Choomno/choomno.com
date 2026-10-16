@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {WheelIntent,initSectionNavigation,transitionDuration} from '../section-navigation.js';
 
-assert.equal(transitionDuration,4800,'each normal transition should last 4.8 seconds');
+assert.equal(transitionDuration,8000,'each transition reserves time for both text sidesteps');
 
 // Trackpad deltas accumulate, while all momentum in one gesture is consumed.
 const intent=new WheelIntent();
@@ -58,12 +58,14 @@ assert.equal(nav.active,2,'a heading hash selects its containing section');
 assert.equal(scrollY,1650.125,'fractional section heights retain precise center positions');
 nav.goTo(0,{immediate:true});assert.equal(scrollY,0,'opening pose leaves header visible');
 nav.goTo(1);assert.equal(nav.goTo(2),false,'transitions cannot be interrupted by another gesture');
-advance(transitionDuration/2);assert.ok(Math.abs(scrollY-849.25/2)<1e-9,'the longer transition is only halfway through at 2.4 seconds');
+advance(transitionDuration/2);assert.ok(Math.abs(scrollY-849.25/2)<1e-9,'the longer transition is only halfway through at 4 seconds');
 advance(transitionDuration/2);assert.equal(scrollY,849.25);
 assert.equal(emit(win,'keydown',{key:'ArrowDown',repeat:true}).defaultPrevented,true);assert.equal(nav.active,1);
 const link=new Target('a');emit(win,'keydown',{key:'PageDown',target:link});assert.equal(nav.active,2,'paging works while a link is focused');advance(transitionDuration);
 const input=new Target('input');assert.equal(emit(win,'keydown',{key:'Home',target:input}).defaultPrevented,false);assert.equal(nav.active,2);
 assert.equal(emit(win,'wheel',{deltaY:100,deltaX:0,ctrlKey:true}).defaultPrevented,false,'pinch/zoom is not intercepted');
+assert.equal(emit(win,'wheel',{deltaY:40,deltaX:100}).defaultPrevented,true,'diagonal wheel motion cannot scroll the document out of sync');
+assert.equal(nav.active,2,'predominantly horizontal wheel motion does not select a section');
 geometry[1][0]+=.25;nav.goTo(1,{immediate:true});globalThis.scrollY=849;nav.goTo(2);advance(transitionDuration);
 assert.equal(scrollY,1650.125,'pixel rounding at a settled anchor must not create an extra near-stationary leg');
 geometry[1][0]-=.25;
@@ -91,6 +93,19 @@ assert.equal(nav.active,3,'pointer focus must not bypass a link transition');
 emit(doc,'click',{target:homeLink,button:0});
 for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'the header home link traverses every reverse leg');}
 nav.goTo(2,{immediate:true});
+
+// Starting a swipe over a link must not escape into native document scrolling.
+const externalLink=new Target('a');externalLink.href='https://example.com/';externalLink.attributes.href=externalLink.href;
+emit(win,'touchstart',{target:externalLink,touches:[{clientX:100,clientY:100}]});
+assert.equal(emit(win,'touchmove',{target:externalLink,touches:[{clientX:100,clientY:10}]}).defaultPrevented,true);
+emit(win,'touchend',{target:externalLink,touches:[],changedTouches:[{clientX:100,clientY:10}]});
+assert.equal(nav.active,3,'a swipe starting over a link advances one section');advance(transitionDuration);
+emit(win,'touchstart',{target:externalLink,touches:[{clientX:100,clientY:100}]});
+emit(win,'touchend',{target:externalLink,touches:[],changedTouches:[{clientX:100,clientY:100}]});
+assert.equal(emit(doc,'click',{target:externalLink,button:0}).defaultPrevented,false,'an ordinary link tap retains its normal action');
+emit(win,'touchstart',{target:input,touches:[{clientX:100,clientY:100}]});
+assert.equal(emit(win,'touchmove',{target:input,touches:[{clientX:100,clientY:10}]}).defaultPrevented,false,'editable controls retain native touch behavior');
+emit(win,'touchcancel');nav.goTo(2,{immediate:true});
 
 // A second finger invalidates the first-finger swipe through all touchend events.
 emit(win,'touchstart',{touches:[{clientX:100,clientY:100}]});

@@ -3,14 +3,15 @@ import {readFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {transitionDuration} from '../section-navigation.js';
+import {textSlideDuration} from '../transition-timing.js';
 
 const scenario=process.argv[2];
 if(!scenario){
- for(const name of ['no-webgl','data-failure','paused','reduced-motion','motion-quality']){
+ for(const name of ['no-webgl','data-failure','paused','reduced-motion','motion-quality','rounded-scroll']){
   const result=spawnSync(process.execPath,['--experimental-default-type=module',fileURLToPath(import.meta.url),name],{encoding:'utf8'});
   assert.equal(result.status,0,`${name}: ${result.stdout}${result.stderr}`);
  }
- console.log('Scene integration: graphics failures preserve text/navigation; paused and reduced-motion scenes navigate independently; short viewports use readable document flow; motion resolution automatically restores full-quality stills.');
+ console.log('Scene integration: graphics failures preserve text/navigation; paused and reduced-motion scenes navigate independently; short viewports use readable document flow; motion resolution automatically restores full-quality stills; rounded scrolling and delayed browser events preserve continuous text/camera motion.');
 }else{
  let now=0,rafId=0,rafs=new Map(),draws=[],frames=[],stepBudget=0;
  class Target {
@@ -45,7 +46,7 @@ if(!scenario){
   const event={type,target:doc.body,defaultPrevented:false,cancelable:true,preventDefault(){this.defaultPrevented=true;},...props};
   target.dispatchEvent(event);return event;
  }
- win.scrollTo=(_,y)=>{globalThis.scrollY=y;emit(win,'scroll');};
+ win.scrollTo=(_,y)=>{globalThis.scrollY=scenario==='rounded-scroll'?Math.round(y):y;emit(win,'scroll');};
  doc.body=new Target('body');doc.documentElement={scrollHeight:3250,classList:new Classes()};doc.createElement=kind=>new Target(kind);doc.fonts={ready:Promise.resolve()};
  const geometry=[[84,760],[848.5,801.5],[1650,800.25],[2450,800]];
  const sections=geometry.map((_,index)=>{
@@ -90,6 +91,40 @@ if(!scenario){
   const initial=scenario==='data-failure'?1:0;visible(initial);
   emit(next,'click');advance(transitionDuration+160);visible(initial+1);
   assert.equal(draws.length,0,'graphics failure does not prevent selecting the next text plane');
+ }else if(scenario==='rounded-scroll'){
+  assert.equal(warnings.length,0);visible(0);
+  const initialTransform=copies[0].style.transform,transforms=[];
+  const departureSampleTime=Math.floor(textSlideDuration/3/16)*16;
+  const initialDrawCount=draws.length;
+  emit(next,'click');
+  for(let elapsed=16;elapsed<=departureSampleTime;elapsed+=16){
+   advance(16);
+   assert.equal(scrollY,0,'the first portion of the sidestep fits inside one native scroll pixel');
+   assert.equal(copies[0].style.visibility,'visible');
+   transforms.push(copies[0].style.transform);
+  }
+  assert.ok(new Set(transforms).size>=20,'text must move continuously while rounded native scrolling remains stationary');
+  assert.ok(new Set(draws.slice(initialDrawCount).map(matrix=>matrix.join(','))).size>=10,'the camera must also advance without a native scroll pixel changing');
+  const centerX=transform=>{
+   const matrix=transform.slice(9,-1).split(',').map(Number),x=copies[0].copyWidth/2,y=copies[0].offsetHeight/2;
+   return (matrix[0]*x+matrix[4]*y+matrix[12])/(matrix[3]*x+matrix[7]*y+1);
+  };
+  assert.ok(centerX(initialTransform)-centerX(transforms.at(-1))>20,'the text displacement must be meaningful, not merely numerical noise');
+  // Flush queued rendering at a fixed timestamp so there is no new navigation
+  // progress to obscure whether a delayed browser event changes the pose.
+  const flushSameTime=()=>{const queue=[...rafs.values()];rafs.clear();for(const fn of queue)fn(now);};
+  flushSameTime();
+  const continuousTransform=copies[0].style.transform,continuousCamera=draws.at(-1);
+  assert.notEqual(continuousTransform,initialTransform);
+  emit(win,'scroll');flushSameTime();
+  assert.equal(copies[0].style.transform,continuousTransform,'a late rounded scroll event must not reset the continuous text pose');
+  assert.deepEqual(draws.at(-1),continuousCamera,'a late scroll event must not replace the camera pose with an integer-scroll approximation');
+  doc.hidden=true;emit(doc,'visibilitychange');flushSameTime();
+  doc.hidden=false;emit(doc,'visibilitychange');flushSameTime();
+  assert.equal(copies[0].style.transform,continuousTransform,'visibility changes must retain the current logical text position');
+  assert.deepEqual(draws.at(-1),continuousCamera,'visibility changes must retain the unrounded camera pose');
+  advance(transitionDuration-departureSampleTime+160);visible(1);
+  assert.equal(scrollY,849,'the reading stop remains exact even when its native scroll position is rounded');
  }else if(scenario==='motion-quality'){
   assert.equal(warnings.length,0);visible(0);
   assert.equal(frames.at(-1).width,1600);assert.equal(frames.at(-1).height,1000);assert.equal(frames.at(-1).steps,112);

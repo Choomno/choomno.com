@@ -43,7 +43,8 @@ function bezier(controls,u){
 // geodesic sidesteps' tangent lines, so arclength parameterization joins C1.
 const bridges=[0,1,2].map(i=>{
  const start=klein(sidePoint(i,sideDistance)),end=klein(sidePoint(i+1,-sideDistance));
- const middle=unit(start.map((x,k)=>x+end[k])).map(x=>.4*x);
+ // A shallow inward arc spreads the center-facing turn over more of the route.
+ const middle=unit(start.map((x,k)=>x+end[k])).map(x=>.8*x);
  return [start,klein(sidePoint(i,sideDistance+handleDistance)),middle,
   klein(sidePoint(i+1,-sideDistance-handleDistance)),end];
 });

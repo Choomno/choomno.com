@@ -148,7 +148,9 @@ the next station from its left. The final 0.012 is another geodesic sidestep.
 The bridge control points share the sidesteps' tangent lines. These small
 lateral movements clear the nearby stationary text before the larger
 movement through the cell. They produce strong text parallax with little
-movement of the surrounding edges.
+movement of the surrounding edges. The middle control point has Klein radius
+0.8: the shallower inward arc spreads the center-facing turn rather than
+concentrating rotation near the cell center.
 
 The bridge is sampled at 8192 intervals, clustered near its endpoints, and
 reparameterized by hyperbolic arclength. Equal phase increments move the eye
@@ -160,20 +162,36 @@ the right and exits to the left.
 
 Independent numerical tests check Lorentz frames, tangent continuity,
 arclength, and clearance. Across 24,001 camera samples, the nearest edge-axis
-distance is approximately 0.0751, versus the tube radius 0.025. A separate
+distance is approximately 0.0697, versus the tube radius 0.025. A separate
 intersection test locates crossings of the infinite text planes and checks
 that each is outside the finite reading rectangle, using five desktop and
 mobile footprints. Neither opacity nor clipping is used to establish that
 clearance.
 
 Each wheel gesture, swipe, tap, or navigation control selects one section.
-A transition between adjacent section centers takes 4.8 seconds and uses
-quintic smootherstep. Jumps across several sections ease through each leg
-separately, taking 4.8 seconds per leg and reaching zero velocity and
-acceleration at each intervening reading stop. A monotone cubic
-interpolation maps the scroll coordinate to camera phase; background and
-text use the same phase without additional lag. The camera rests between
-gestures.
+`transition-timing.js` reserves 1.6 seconds for the departure sidestep,
+4.8 seconds for the bridge, and 1.6 seconds for the arrival sidestep. The
+timeline has continuous velocity and acceleration, with positive velocity
+at both sidestep/bridge handoffs. A quintic velocity ramp leads into and out
+of a broad constant-speed middle. The eye comes to rest only at reading
+stops. A complete adjacent transition takes 8 seconds. Jumps across
+several sections traverse each leg separately; reverse navigation retraces
+the same timed path.
+
+The navigation controller reports a continuous logical section position
+directly to the renderer and text projection. Native scroll positions are
+rounded by the browser: a sidestep occupies only a few CSS scroll pixels,
+so those positions cannot drive the near text smoothly. In projected mode,
+scroll and visibility events consult the controller's unrounded progress.
+Immediate navigation, hashes, resizing, and reduced motion also report exact
+station positions. The monotone cubic mapping from native scroll to camera
+phase is retained for the ordinary document-flow fallback.
+
+`tests/text-transition.mjs` verifies the timeline joins, reversal, fully
+opaque entry from the viewport edge, and a visible arrival of at least
+0.75 seconds across the tested desktop/mobile layouts. The scene integration
+test rounds native scroll positions and confirms that camera and text still
+move continuously, including after delayed scroll and visibility events.
 
 Pause background freezes its pose while text navigation selects centered
 stills. Reduced-motion preferences similarly use immediate section changes
@@ -268,6 +286,7 @@ Check the current geometry and browser-independent navigation/projection:
     node --experimental-default-type=module tests/scroll-choreography.mjs
     node --experimental-default-type=module tests/projection.mjs
     node --experimental-default-type=module tests/section-navigation.mjs
+    node --experimental-default-type=module tests/text-transition.mjs
     node --experimental-default-type=module tests/scene-fallback.mjs
 
 The dodecahedral ray tests exercise paired-cell crossings and independent

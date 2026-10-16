@@ -1,5 +1,6 @@
 // A gesture selects one reading pose; its momentum cannot select a second pose.
-export const transitionDuration=4800;
+import {transitionDuration,transitionProgress} from './transition-timing.js';
+export {transitionDuration} from './transition-timing.js';
 const interactive='a,button,input,select,textarea,summary,details,[contenteditable="true"]';
 const editable='input,select,textarea,[contenteditable="true"]';
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
@@ -19,12 +20,12 @@ export class WheelIntent {
  }
 }
 
-export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
+export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProgress=()=>{}}={}){
  const sections=[...document.querySelectorAll('main > section')];
  if(!sections.length)return null;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)'),wheel=new WheelIntent();
  const listeners=[];
- let active=0,moving=false,animation=0,resizeFrame=0,touch=null,multiTouch=false,ignoreClickUntil=0,pointerFocusUntil=0,destroyed=false;
+ let active=0,progress=0,moving=false,animation=0,resizeFrame=0,touch=null,multiTouch=false,ignoreClickUntil=0,pointerFocusUntil=0,destroyed=false;
  const oldRestoration=history.scrollRestoration;
  history.scrollRestoration='manual';
  const position=i=>{
@@ -53,6 +54,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  function stop(){cancelAnimationFrame(animation);animation=0;moving=false;}
  function goTo(index,{immediate=false,updateHash=true,interrupt=false}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
+  const startIndex=active;
   stop();active=clamp(index,0,sections.length-1);
   const start=scrollY,end=position(active),legDuration=immediate||reduced.matches?0:transitionDuration;
   const direction=Math.sign(end-start);
@@ -61,15 +63,21 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
   // Browser scrolling can round a fractional anchor to a device pixel.
   const anchors=sections.map((_,i)=>position(i)).filter(y=>direction*(y-start)>.75&&direction*(end-y)>.75).sort((a,b)=>direction*(a-b));
   const stops=[start,...anchors,end],duration=legDuration*(stops.length-1);
+  const indices=stops.map((y,i)=>i===0?startIndex:sections.reduce((best,_,j)=>Math.abs(position(j)-y)<Math.abs(position(best)-y)?j:best,active));
+  const report=value=>{progress=value;onProgress(value);};
   if(updateHash)history.replaceState(history.state,'',hashFor(active));
   onChange(active);document.dispatchEvent(new CustomEvent('sectionchange',{detail:{index:active}}));
-  if(!duration||Math.abs(end-start)<.75){window.scrollTo(0,end);updateControls();return true;}
+  if(!duration||startIndex===active||Math.abs(end-start)<.75){window.scrollTo(0,end);report(active);updateControls();return true;}
   moving=true;updateControls();const began=performance.now();
   function step(now){
    if(destroyed||!isEnabled()){stop();updateControls();return;}
    const elapsed=Math.min(duration,now-began),leg=Math.min(stops.length-2,Math.floor(elapsed/legDuration));
-   const t=Math.min(1,(elapsed-leg*legDuration)/legDuration),ease=t*t*t*(t*(t*6-15)+10);
-   window.scrollTo(0,stops[leg]+(stops[leg+1]-stops[leg])*ease);
+   const routeLeg=Math.min(indices[leg],indices[leg+1]);
+   const fraction=transitionProgress(elapsed-leg*legDuration,routeLeg);
+   window.scrollTo(0,stops[leg]+(stops[leg+1]-stops[leg])*fraction);
+   // Native scroll coordinates are rounded. Preserve the unrounded logical
+   // position for the camera and text, whose nearby parallax is much larger.
+   report(indices[leg]+(indices[leg+1]-indices[leg])*fraction);
    if(elapsed<duration)animation=requestAnimationFrame(step);
    else{moving=false;animation=0;updateControls();}
   }
@@ -84,8 +92,9 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  const on=(target,type,handler,options)=>{target.addEventListener(type,handler,options);listeners.push(()=>target.removeEventListener(type,handler,options));};
  on(previous,'click',()=>goTo(active-1));on(next,'click',()=>goTo(active+1));
  on(window,'wheel',event=>{
-  if(!isEnabled()||event.ctrlKey||event.target.closest(editable)||Math.abs(event.deltaX)>Math.abs(event.deltaY))return;
+  if(!isEnabled()||event.ctrlKey||event.target.closest(editable))return;
   event.preventDefault();
+  if(Math.abs(event.deltaX)>Math.abs(event.deltaY))return;
   const unit=event.deltaMode===1?16:event.deltaMode===2?innerHeight:1;
   const direction=wheel.push(event.deltaY*unit,performance.now(),moving);
   if(direction)goTo(active+direction);
@@ -95,7 +104,8 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
   if(event.touches.length!==1){multiTouch=true;touch=null;return;}
   if(multiTouch)return;
   const point=event.touches[0];
-  touch=event.target.closest(interactive)?null:{x:point.clientX,y:point.clientY};
+  // Swipes may start over links or controls; their ordinary taps still work.
+  touch=event.target.closest(editable)?null:{x:point.clientX,y:point.clientY};
  },{passive:true});
  on(window,'touchmove',event=>{
   if(event.touches.length!==1){multiTouch=true;touch=null;return;}
@@ -149,5 +159,5 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  on(window,'resize',()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(refresh);});
  on(reduced,'change',refresh);
  const initial=sectionForHash(location.hash);active=initial>=0?initial:nearest();refresh();
- return {goTo,refresh,get active(){return active;},destroy(){destroyed=true;stop();cancelAnimationFrame(resizeFrame);listeners.forEach(remove=>remove());controls.remove();history.scrollRestoration=oldRestoration;}};
+ return {goTo,refresh,get active(){return active;},get progress(){return progress;},destroy(){destroyed=true;stop();cancelAnimationFrame(resizeFrame);listeners.forEach(remove=>remove());controls.remove();history.scrollRestoration=oldRestoration;}};
 }

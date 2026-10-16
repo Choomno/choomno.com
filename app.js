@@ -32,6 +32,9 @@ async function createRenderer(){
 }
 
 function updateScroll(){
+ if(navigation&&document.documentElement.classList.contains('projected-text')){
+  targetPhase=readingPhase(navigation.progress);return;
+ }
  const landmarks=['#background','.current','.elsewhere'].map((selector,i)=>{
   const rect=document.querySelector(selector).getBoundingClientRect();
   return {y:scrollY+rect.top+rect.height/2-innerHeight/2,phase:readingPhase(i+1)};
@@ -64,7 +67,7 @@ function draw(time){
 async function main(){
  await document.fonts.ready;
  initTextSprites();
- navigation=initSectionNavigation({isEnabled:()=>document.documentElement.classList.contains('projected-text'),onChange:()=>updateText()});
+ navigation=initSectionNavigation({isEnabled:()=>document.documentElement.classList.contains('projected-text'),onChange:()=>updateText(),onProgress:value=>{targetPhase=readingPhase(value);}});
  resize();updateScroll();phase=targetPhase;updateText();state();
  window.addEventListener('scroll',updateScroll,{passive:true});
  window.addEventListener('resize',resize);
