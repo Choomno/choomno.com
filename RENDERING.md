@@ -102,26 +102,37 @@ used. Every edge joins two ideal endpoints, so there are no finite caps.
 The intersection calculation is analytic.
 
 The tube radius is 0.025 in curvature −1 units. The page uses muted neutral
-beams, narrow warm reflections, and a charcoal background. Distance
-attenuation keeps distant structure subordinate.
-Material shading, attenuation, and the beam thickness are presentation
-choices rather than a global illumination calculation.
+beams, narrow warm reflections, and a charcoal background. The material's
+base RGB values are (0.32, 0.3136, 0.297). At distance d, visibility is
+weighted by exp(−0.18d)/(1 + 0.18d²), retaining more of the distant scaffold
+while keeping it subordinate to nearby beams. Material shading, attenuation,
+and beam thickness are presentation choices.
 
 ## Camera and section transitions
 
-The camera follows a circle at hyperbolic distance 2 from the finite center
-of a cell and looks inward toward that center. The circle lies in the xz
-plane of the canonical coordinates. Its initial polar angle is arctan(φ²),
-and the four reading stops are separated by π/4, in the clockwise direction.
-`readingPose(phase)` implements this using
-`cellTurn(arctan(φ²) − π/4 − phase, 2)` from the retained Lorentz frame helper.
-It moves near ideal ends and crosses cell faces; the unfolded path is
-continuous even when its representative changes cells. Reverse
-navigation retraces the same path. The phase direction makes text enter
-from the right and exit to the left.
+The camera follows one circle at hyperbolic distance 2.54 from the finite
+center of a fixed, unfolded cell and looks inward toward that center.
+Its initial radial direction is (1, 0, φ)/√(φ + 2). At the opening stop,
+screen up is (φ, 0, −1)/√(φ + 2), and screen right is the positive y axis.
+This makes an ideal vertex upright above a horizontal pair of ideal ends.
+
+The orbit plane is tilted by 9° toward the initial up direction. A constant
+roll compensation preserves the intended opening orientation. The small
+tilt brings the camera close to an ideal end on the way to the Background
+stop, with that ideal point behind the camera. Its maximum Busemann height
+is approximately 2.232, normalized by the ideal vertex's time coordinate 1.
+The numerical path check samples a minimum
+edge-axis distance of about 0.09768, compared with the tube radius 0.025.
+
+`camera-path.js` defines both the camera frames and reading phases. The four
+logical phases are 0, π/4, π/2, and 3π/4, mapped to physical orbital angles
+0, π/3, 2π/3, and π: a half-circle. The unfolded path remains continuous
+when its representative changes cells. Reverse navigation retraces the same
+path. The phase direction makes text enter from the right and exit to the
+left.
 
 Each wheel gesture, swipe, tap, or navigation control selects one section.
-The scroll coordinate moves between section centers over 1.1 seconds using
+The scroll coordinate moves between section centers over 1.45 seconds using
 quintic smootherstep. A monotone cubic interpolation maps that coordinate
 to camera phase; both background and text use the same phase without
 additional lag. The camera rests at a reading pose between gestures.
@@ -151,9 +162,11 @@ not fit the viewport, and a graphics failure does not remove the content.
 
 The algebraic certificate specifies exact geometry and face pairings.
 JavaScript camera arithmetic uses doubles, while the GPU uses float32.
-Pixel resolution, a face crossing limit of 48 / 96 / 160, and a distance
-cutoff of 24 bound rendering work. Grazing intersections and very distant
-structure remain subject to floating point rounding. The image is not
+Pixel resolution, a face crossing limit of 96 / 160 / 240, and a traveled
+distance cutoff of 32 bound rendering work. A local face-intersection
+parameter tanh(s) ≥ 0.999999 also terminates tracing to avoid unstable
+near-ideal arithmetic. Grazing intersections and very distant structure
+remain subject to floating point rounding. The image is not
 claimed to have certified pixel accuracy.
 
 ## Historical Borromean data

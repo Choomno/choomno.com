@@ -25,7 +25,7 @@ async function createRenderer(){
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
   gl.uniformMatrix4fv(uCamera,false,new Float32Array(frame[0].flatMap((_,i)=>frame.map(row=>row[i]))));
   gl.uniform1i(uCell,cell);gl.uniform1f(uniform('beamRadius'),.025);
-  gl.uniform2f(uRes,w,h);gl.uniform1i(uSteps,quality<1?48:quality<1.5?96:160);gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.uniform2f(uRes,w,h);gl.uniform1i(uSteps,quality<1?96:quality<1.5?160:240);gl.drawArrays(gl.TRIANGLES,0,3);
  };
 }
 

@@ -70,7 +70,7 @@ void main(){
  vec4 p=camera[0],d=camera*vec4(0.,normalize(vec3(uv*.82,1.)));
  vec3 background=vec3(.0035,.0033,.0031);
  int cell=cameraCell,entry=-1;float total=0.;float cr=cosh(beamRadius),cr2=cr*cr;
- for(int step=0;step<160;step++){
+ for(int step=0;step<240;step++){
   if(step>=maxSteps)break;
   float qFace=1.;int face=-1;
   for(int f=0;f<${faces};f++){
@@ -95,17 +95,17 @@ void main(){
    vec4 normal=cr2*hit+ld(hit,a)*a-ld(hit,t)*t;
    normal/=sqrt(max(ld(normal,normal),1e-12));
    float facing=clamp(abs(ld(direction,normal)),0.,1.);
-   vec3 color=vec3(.25,.245,.232);
+   vec3 color=vec3(.32,.3136,.297);
    total+=distanceOf(qHit);
    float rim=pow(1.-facing,3.);
    vec3 lit=color*(.11+.72*sqrt(facing));
    lit+=vec3(.78,.74,.67)*.03*pow(facing,70.);
    lit+=vec3(.24,.23,.21)*rim*.06;
-   float visibility=1./(1.+.18*pow(sinh(min(total,12.)),2.));
+   float visibility=exp(-.18*total)/(1.+.18*total*total);
    vec3 mapped=vec3(1.)-exp(-lit*1.65);
    pixel=vec4(pow(mix(background,mapped,visibility),vec3(1./2.2)),1.);return;
   }
-  if(face<0||qFace>=.999999||total>24.)break;
+  if(face<0||qFace>=.999999||total>32.)break;
   float c=inversesqrt(max(1.-qFace*qFace,1e-12));
   vec4 nextP=c*(p+qFace*d),nextD=c*(d+qFace*p);
   mat4 m=pairing(cell,face);vec4 meta=datum(cell,face,7);

@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import {phaseAtScroll} from '../scroll-choreography.js';
-import {dot,advance,identity} from '../polyhedral.js';
-import {readingPose} from '../camera-path.js';
-import {readFile} from 'node:fs/promises';
+import {dot} from '../polyhedral.js';
+import {readingPose,readingPhase} from '../camera-path.js';
 const marks=[{y:600,phase:Math.PI/4},{y:1300,phase:Math.PI/2},{y:2000,phase:3*Math.PI/4}];
 for(const m of marks)assert.equal(phaseAtScroll(m.y,marks),m.phase);
 for(const m of marks.slice(0,-1)){
@@ -13,12 +12,20 @@ for(const m of marks.slice(0,-1)){
  assert.ok(left>0&&Math.abs(left-right)<1e-7);
 }
 let previous=0;for(let y=0;y<=2400;y++){const p=phaseAtScroll(y,marks);assert.ok(p>=previous);previous=p;}
-const data=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
-// Calibrate the opening view to a canonical ideal vertex directly behind it.
-const phi=(1+Math.sqrt(5))/2;
-const f=readingPose(0),U=[1,phi/Math.sqrt(3),0,1/phi/Math.sqrt(3)];
-const sky=(frame,u)=>{const q=frame[0].map((_,j)=>dot(frame.map(r=>r[j]),u));return q.slice(1).map(x=>x/-q[0]);};
-for(const [i,v] of sky(f,U).entries())assert.ok(Math.abs(v-[0,0,-1][i])<1e-12);
-const folded=advance(identity(),0,f,data,U);
-for(const [i,v] of sky(folded.frame,folded.ideal).entries())assert.ok(Math.abs(v-[0,0,-1][i])<1e-10);
-console.log('Continuous nonzero motion through reading poses, monotone scroll transitions, and exactly rearward ideal endpoint verified before and after face identifications.');
+// The scroll parameter follows a single circle around the fixed original
+// cell center. Forward progression moves the eye toward screen-right,
+// so stationary text travels from right to left.
+const origin=[1,0,0,0],initial=readingPose(0),final=readingPose(readingPhase(3));
+const initialEye=initial.map(row=>row[0]);
+for(let y=0;y<2000;y+=5){
+ const phase=phaseAtScroll(y,marks),next=phaseAtScroll(y+.01,marks);
+ const frame=readingPose(phase),following=readingPose(next),eye=frame.map(row=>row[0]);
+ const right=frame.map(row=>row[1]),up=frame.map(row=>row[2]),forward=frame.map(row=>row[3]);
+ assert.ok(Math.abs(dot(eye,origin)-dot(initialEye,origin))<1e-10);
+ assert.ok(Math.abs(dot(right,origin))<1e-10&&Math.abs(dot(up,origin))<1e-10);
+ assert.ok(dot(forward,origin)>0);
+ const displacement=following.map((row,i)=>row[0]-eye[i]);
+ assert.ok(dot(displacement,right)>0,'Camera must move continuously toward screen-right');
+}
+for(let i=1;i<4;i++)assert.ok(Math.abs(initial[i][0]+final[i][0])<1e-10);
+console.log('Continuous nonzero motion through reading poses, monotone scroll transitions, right-to-left travel, and a half-circle about the fixed original cell center verified.');

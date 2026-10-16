@@ -74,10 +74,29 @@ for(const domainBeams of beams)for(const {a,t} of domainBeams)for(const along of
 }
 // The entire slide arc, not a full 2π orbit, must stay clear of scaffolding.
 const origin=[1,0,0,0];let minClearance=Infinity;
+const first=readingPose(readingPhase(0)),last=readingPose(readingPhase(3));
+// The last station is antipodal about the SAME reference cell center.
+for(let k=1;k<4;k++)close(first[k][0],-last[k][0]);
+// Recover the orbit plane from two camera positions, independently of the
+// implementation's basis/tilt constants. Every later eye must lie in it.
+const euclideanDot=(a,b)=>a.reduce((sum,x,i)=>sum+x*b[i],0);
+const normalize=v=>scale(v,1/Math.hypot(...v));
+const radial0=normalize(first.slice(1).map(row=>row[0]));
+const second=normalize(readingPose(readingPhase(3)*.41).slice(1).map(row=>row[0]));
+const tangent0=normalize(second.map((x,i)=>x-euclideanDot(second,radial0)*radial0[i]));
+const orbitNormal=[radial0[1]*tangent0[2]-radial0[2]*tangent0[1],
+ radial0[2]*tangent0[0]-radial0[0]*tangent0[2],radial0[0]*tangent0[1]-radial0[1]*tangent0[0]];
 for(let i=0;i<=8000;i++){
  const phase=readingPhase(3)*i/8000,raw=readingPose(phase),eye=raw.map(r=>r[0]),forward=raw.map(r=>r[3]);
  close(-dot(eye,origin),Math.cosh(orbitRadius));
- point(eye,forward,orbitRadius).forEach((x,k)=>close(x,origin[k]));
+ close(euclideanDot(eye.slice(1),orbitNormal),0);
+ // Project the original center into this camera, rather than choosing the
+ // center of whichever neighboring cell currently contains the camera.
+ close(dot(raw.map(r=>r[1]),origin),0);
+ close(dot(raw.map(r=>r[2]),origin),0);
+ assert.ok(dot(forward,origin)>0,'Original center must remain ahead');
+ const distanceToOriginalCenter=Math.acosh(-dot(eye,origin));
+ point(eye,forward,distanceToOriginalCenter).forEach((x,k)=>close(x,origin[k]));
  for(let k=0;k<4;k++)for(let l=0;l<4;l++)close(dot(raw.map(r=>r[k]),raw.map(r=>r[l])),k===l?(k===0?-1:1):0);
  const folded=advance(identity(),0,raw,data),p=folded.frame.map(r=>r[0]);
  for(const {a,t} of beams[folded.cell]){
@@ -85,7 +104,67 @@ for(let i=0;i<=8000;i++){
   minClearance=Math.min(minClearance,distance);
  }
 }
-assert.ok(minClearance>.10,`Camera approaches beams too closely: ${minClearance}`);
+assert.ok(minClearance>.07,`Camera approaches beams too closely: ${minClearance}`);
+// The opening direction comes from the actual face data, not hard-coded
+// camera constants. Five coplanar ideal vertices project to a regular
+// pentagon; its vertex 15 is upward and the lower edge is level.
+function projectVertices(camera,indices){
+ const cols=camera[0].map((_,i)=>camera.map(row=>row[i]));
+ return indices.map(index=>{
+  const v=data.cells[0].vertices[index],p=cols.slice(1).map(c=>dot(c,v));
+  assert.ok(p[2]>0,'The selected face must lie in front of the camera');
+  return {index,x:p[0]/p[2]/.82,y:p[1]/p[2]/.82,depth:p[2]};
+ });
+}
+const frontFace=data.cells[0].faces[11],frontNormal=data.cells[0].planes[11].slice(1);
+const normalLength=Math.hypot(...frontNormal),eyeSpatial=first.slice(1).map(r=>r[0]);
+eyeSpatial.forEach((x,i)=>close(x/Math.hypot(...eyeSpatial),frontNormal[i]/normalLength));
+function regularProjectedPentagon(camera,face){
+ const projected=projectVertices(camera,face),radii=projected.map(p=>Math.hypot(p.x,p.y));
+ const sides=projected.map((p,i)=>Math.hypot(p.x-projected[(i+1)%5].x,p.y-projected[(i+1)%5].y));
+ radii.forEach(x=>close(x,radii[0]));sides.forEach(x=>close(x,sides[0]));
+ projected.forEach(p=>close(p.depth,projected[0].depth));
+ close(projected.reduce((sum,p)=>sum+p.x,0),0);close(projected.reduce((sum,p)=>sum+p.y,0),0);
+ return projected;
+}
+const openingPentagon=regularProjectedPentagon(first,frontFace);
+const top=openingPentagon.find(p=>p.index===15),bottom=openingPentagon.filter(p=>[9,11].includes(p.index));
+assert.ok(top&&top.y>0);close(top.x,0);
+assert.ok(openingPentagon.every(p=>p.y<=top.y+1e-10));
+assert.equal(bottom.length,2);close(bottom[0].y,bottom[1].y);close(bottom[0].x,-bottom[1].x);
+assert.ok(bottom[0].y<0);
+const oppositeFace=data.cells[0].faces.find((face,f)=>
+ data.cells[0].planes[f].slice(1).every((x,i)=>Math.abs(x+frontNormal[i])<1e-10));
+assert.ok(oppositeFace);regularProjectedPentagon(last,oppositeFace);
+
+// Locate the closest approach to ideal vertex 7 by minimizing its null
+// pairing directly, without knowing the camera's angular parameterization.
+// Because this null vector has time coordinate 1, -log(-<eye,v>) measures
+// Busemann height relative to the horosphere through the original center.
+const cusp=data.cells[0].vertices[7];
+const nullPair=phase=>-dot(readingPose(phase).map(row=>row[0]),cusp);
+let lower=readingPhase(0),upper=readingPhase(3);
+for(let iteration=0;iteration<80;iteration++){
+ const a=lower+(upper-lower)/3,b=upper-(upper-lower)/3;
+ if(nullPair(a)<nullPair(b))upper=b;else lower=a;
+}
+const cuspPhase=(lower+upper)/2,cuspPose=readingPose(cuspPhase),cuspEye=cuspPose.map(row=>row[0]);
+const projectedCusp=normalize(radial0.map((x,i)=>x*euclideanDot(cusp.slice(1),radial0)
+ +tangent0[i]*euclideanDot(cusp.slice(1),tangent0)));
+normalize(cuspEye.slice(1)).forEach((x,i)=>close(x,projectedCusp[i],5e-8));
+const busemann=-Math.log(nullPair(cuspPhase));
+assert.ok(busemann>2.2,'The orbit should move substantially into the cusp');
+assert.ok(nullPair(cuspPhase)<nullPair(0)&&nullPair(cuspPhase)<nullPair(readingPhase(3)));
+const sky=(camera,v)=>{
+ const energy=-dot(camera.map(row=>row[0]),v);
+ return [1,2,3].map(k=>dot(camera.map(row=>row[k]),v)/energy);
+};
+const cuspDirection=sky(cuspPose,cusp);
+assert.ok(cuspDirection[2]<-.4,'At closest approach the ideal point must lie behind the camera');
+close(Math.hypot(...cuspDirection),1);
+const foldedCusp=advance(identity(),0,cuspPose,data,cusp);
+sky(foldedCusp.frame,foldedCusp.ideal).forEach((x,i)=>close(x,cuspDirection[i]));
+
 // Each centered still should contain distinct ideal endpoints. This checks
 // directions geometrically, not whether rasterized edges are bright enough.
 const endpointCounts=[];
@@ -95,6 +174,6 @@ for(let stop=0;stop<4;stop++){
  const projected=data.cells[0].vertices.map(v=>cols.slice(1).map(c=>dot(c,v))).filter(v=>v[2]>0)
   .map(v=>[v[0]/v[2]/.82,v[1]/v[2]/.82]);
  const count=projected.filter(([x,y])=>Math.abs(x)<390/844&&Math.abs(y)<1).length;
- assert.ok(count>=3,`Only ${count} ideal endpoints in portrait still ${stop}`);endpointCounts.push(count);
+ assert.ok(count>=10,`Only ${count} ideal endpoints in portrait still ${stop}`);endpointCounts.push(count);
 }
-console.log(`Dodecahedral checks passed: ${crossings} face crossings (${cellChanges} cell changes); ${intersectionChecks} independent all-ideal tube intersections; minimum sampled orbit clearance ${minClearance.toFixed(6)}; portrait ideal endpoints ${endpointCounts.join('/')}.`);
+console.log(`Dodecahedral checks passed: ${crossings} face crossings (${cellChanges} cell changes); ${intersectionChecks} independent all-ideal tube intersections; minimum sampled orbit clearance ${minClearance.toFixed(6)}; portrait ideal endpoints ${endpointCounts.join('/')}; Busemann height ${busemann.toFixed(6)} with ideal point behind camera; fixed planar circle and upright regular pentagonal opening verified.`);

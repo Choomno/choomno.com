@@ -53,7 +53,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  function goTo(index,{immediate=false,updateHash=true,interrupt=false}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
   stop();active=clamp(index,0,sections.length-1);
-  const start=scrollY,end=position(active),duration=immediate||reduced.matches?0:1100;
+  const start=scrollY,end=position(active),duration=immediate||reduced.matches?0:1450;
   if(updateHash)history.replaceState(history.state,'',hashFor(active));
   onChange(active);document.dispatchEvent(new CustomEvent('sectionchange',{detail:{index:active}}));
   if(!duration||Math.abs(end-start)<.25){window.scrollTo(0,end);updateControls();return true;}

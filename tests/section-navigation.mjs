@@ -56,9 +56,9 @@ assert.equal(nav.active,2,'a heading hash selects its containing section');
 assert.equal(scrollY,1650.125,'fractional section heights retain precise center positions');
 nav.goTo(0,{immediate:true});assert.equal(scrollY,0,'opening pose leaves header visible');
 nav.goTo(1);assert.equal(nav.goTo(2),false,'transitions cannot be interrupted by another gesture');
-advance(1200);assert.equal(scrollY,849.25);
+advance(1600);assert.equal(scrollY,849.25);
 assert.equal(emit(win,'keydown',{key:'ArrowDown',repeat:true}).defaultPrevented,true);assert.equal(nav.active,1);
-const link=new Target('a');emit(win,'keydown',{key:'PageDown',target:link});assert.equal(nav.active,2,'paging works while a link is focused');advance(1200);
+const link=new Target('a');emit(win,'keydown',{key:'PageDown',target:link});assert.equal(nav.active,2,'paging works while a link is focused');advance(1600);
 const input=new Target('input');assert.equal(emit(win,'keydown',{key:'Home',target:input}).defaultPrevented,false);assert.equal(nav.active,2);
 assert.equal(emit(win,'wheel',{deltaY:100,deltaX:0,ctrlKey:true}).defaultPrevented,false,'pinch/zoom is not intercepted');
 // A second finger invalidates the first-finger swipe through all touchend events.

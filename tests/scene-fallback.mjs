@@ -85,14 +85,14 @@ if(!scenario){
   assert.equal(play.disabled,true);assert.equal(detail.disabled,true);
   assert.equal(warnings.length,1);assert.match(warnings[0],scenario==='no-webgl'?/WebGL 2 unavailable/:/Manifold data could not be loaded/);
   const initial=scenario==='data-failure'?1:0;visible(initial);
-  emit(next,'click');advance(1200);visible(initial+1);
+  emit(next,'click');advance(1600);visible(initial+1);
   assert.equal(draws.length,0,'graphics failure does not prevent selecting the next text plane');
  }else{
   assert.equal(warnings.length,0);assert.ok(draws.length>0);visible(0);
   if(scenario==='paused'){emit(play,'click');advance(16);assert.equal(play.textContent,'Resume background');}
   else assert.equal(play.textContent,'Resume background');
   const frozen=draws.at(-1),drawCount=draws.length;
-  emit(next,'click');advance(1200);visible(1);
+  emit(next,'click');advance(1600);visible(1);
   assert.equal(draws.length,drawCount,'changing a reading stop does not move a paused/reduced-motion background');
   assert.deepEqual(draws.at(-1),frozen);
   if(scenario==='paused')emit(play,'click');
