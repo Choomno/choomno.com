@@ -12,8 +12,8 @@ that doubles as a portfolio it shows you document your work.)
 ## Hyperbolic homepage
 
 The home page now includes an intrinsic WebGL 2 ray tracer for the complete
-Borromean rings complement, with SnapPy face pairings and an exact gluing
-certificate. See [RENDERING.md](RENDERING.md) for the computation, upstream
+Borromean rings complement, with the complete-limit silver rhombic dodecahedral lattice, exact integer
+SnapPy face pairings, and an exact gluing certificate. See [RENDERING.md](RENDERING.md) for the computation, upstream
 repositories, precision limits, and verification commands. The secondary pages
 retain the original shared layout.
 
