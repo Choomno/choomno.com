@@ -47,6 +47,15 @@ application rendering loop while a reading station is at rest. MP4 and WebM
 provide alternative encodings (H.264/x264 CRF 18 and VP9 CRF 21); blocked playback, codec failures, or a long
 stall settle on the destination poster with functional text and navigation.
 
+After the opening poster is decoded, `video-cache.js` fetches the six clips
+for the current aspect ratio and supported codec, one at a time. Navigation
+prioritizes its clip and shares any download already in progress. Each file
+is completely downloaded to a Blob before playback starts, so network
+stalls cannot interrupt the transition. The cache retains at most one
+six-clip family and revokes object URLs when that family changes or the
+player is destroyed. Save-Data and reduced-motion preferences disable eager
+loading; hidden tabs stop starting speculative downloads.
+
 Portrait and landscape masters use `object-fit: cover`. On viewports wider
 than the 2:1 master, `projection.js` uses the same cropped vertical field
 of view for the text. Ordinary viewports retain the original camera field.

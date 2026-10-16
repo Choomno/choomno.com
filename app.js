@@ -1,7 +1,7 @@
 import {projectText,initTextSprites,setTextProjection} from './text-sprites.js?v=prerendered-60-1';
 import {initSectionNavigation} from './section-navigation.js?v=prerendered-60-1';
 import {readingPhase} from './camera-path.js';
-import {createPrerenderedPlayer} from './prerendered.js?v=prerendered-60-1';
+import {createPrerenderedPlayer} from './prerendered.js?v=buffered-60-2';
 const play=document.querySelector('#play');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 const player=createPrerenderedPlayer({still:document.querySelector('#background-still'),video:document.querySelector('#background-video'),portraitSource:document.querySelector('#background-portrait')});

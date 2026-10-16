@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createPrerenderedPlayer,stationImage,transitionVideo} from '../prerendered.js';
 import {transitionDuration,transitionProgress} from '../transition-timing.js';
 import {portraitAspect} from '../media-settings.js';
+import {createVideoCache} from '../video-cache.js';
 
 let now=0,nextId=0,rafs=new Map(),timers=new Map();
 Object.defineProperty(globalThis,'navigator',{value:{connection:{saveData:false}},configurable:true});
@@ -43,7 +44,8 @@ function fixture(options){
  Object.defineProperty(still,'src',{get:()=>stillWrites.at(-1),set:value=>stillWrites.push(value)});
  Object.defineProperty(portraitSource,'srcset',{get:()=>portraitWrites.at(-1),set:value=>portraitWrites.push(value)});
  if(options?.decodePoster)still.decode=()=>new Promise((resolve,reject)=>decodes.push({resolve,reject,src:still.src,portrait:portraitSource.srcset}));
- const player=createPrerenderedPlayer({still,video,portraitSource});let completions=0;
+ const cache=options?.cache??{configure(){},request(url,ready){ready(url);return()=>{};},setHidden(){},destroy(){}};
+ const player=createPrerenderedPlayer({still,video,portraitSource,cache});let completions=0;
  const navigate=(from,to)=>player.navigate({from,to,onProgress:value=>progress.push(value),onComplete:()=>++completions});
  return {still,portraitSource,stillWrites,portraitWrites,decodes,video,player,progress,navigate,get completions(){return completions;}};
 }
@@ -156,9 +158,9 @@ function fixture(options){
   f.video.onerror();assert.equal(f.video.src,transitionVideo(0,1,'webm',portrait),'format retry preserves the selected responsive variant');
   f.video.present(.4);assert.equal(f.progress.at(-1),transitionProgress(400,0),'responsive crops share the same camera clock');
   f.video.onended();assert.equal(f.still.src,stationImage(1));assert.equal(f.portraitSource.srcset,stationImage(1,true));
-  assert.equal(f.video.src,transitionVideo(1,1,'mp4',portrait));assert.equal(preloads.at(-1).src,stationImage(2,portrait));
+  assert.equal(f.video.src,transitionVideo(1,1,'webm',portrait));assert.equal(preloads.at(-1).src,stationImage(2,portrait));
   f.video.onended();assert.equal(f.portraitSource.srcset,stationImage(2,true));
-  f.navigate(2,1);assert.equal(f.video.src,transitionVideo(1,-1,'mp4',portrait));assert.equal(preloads.at(-1).src,stationImage(1,portrait));
+  f.navigate(2,1);assert.equal(f.video.src,transitionVideo(1,-1,'webm',portrait));assert.equal(preloads.at(-1).src,stationImage(1,portrait));
   f.video.onended();assert.equal(f.portraitSource.srcset,stationImage(1,true));await flush();f.player.destroy();
  }
  // The app settles on resize, then the next navigation chooses the new master.
@@ -260,4 +262,87 @@ function fixture(options){
  assert.equal(g.video.hidden,false);assert.equal(g.progress.at(-1),1);assert.equal(g.completions,1,'a stalled poster cannot lock the page indefinitely');
  g.decodes.at(-1).resolve();await flush();assert.equal(g.completions,1);g.player.destroy();
 }
-console.log('Prerendered player: presented-frame clock, reverse/multi-leg clips, decoded poster handoffs, exact endpoints, codec fallback, promise races, hidden tabs, cancellation, responsive sources/preloads, autoplay/timeouts and legacy media-clock fallback passed.');
+// Real download scheduling is exercised separately from the immediate cache
+// used above, including the interval between response headers and full body.
+{
+ const originalFetch=globalThis.fetch,originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL;
+ const downloads=[],created=[],revoked=[];
+ globalThis.fetch=(url,{signal})=>new Promise((resolve,reject)=>{
+  let finishBody;
+  const body=new Promise(yes=>finishBody=yes);
+  const item={url,signal,headers(){resolve({ok:true,blob:()=>body});},finish(){finishBody(new Blob(['encoded video']));},fail(){reject(new Error('Network failure'));}};
+  signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});downloads.push(item);
+ });
+ URL.createObjectURL=blob=>{const url='blob:test-'+created.length;created.push({url,blob});return url;};
+ URL.revokeObjectURL=url=>revoked.push(url);
+ const settle=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
+ const urls=['a','b','c','d','e','f'];
+ try{
+  // Landing waits for the first still, then starts one download. Navigation
+  // reuses that in-flight fetch and does not play after only its headers arrive.
+  const cache=createVideoCache(),f=fixture({cache,decodePoster:true});
+  f.player.showStation(0);assert.equal(downloads.length,0,'the initial image decodes before eager video traffic starts');
+  f.decodes.at(-1).resolve();await settle();assert.equal(downloads.length,1);assert.equal(downloads.at(-1).url,transitionVideo(0,1,'mp4'));
+  f.navigate(0,1);assert.equal(downloads.length,1,'navigation joins the first eager download');
+  downloads.at(-1).headers();await settle();assert.equal(f.video.loads.length,0,'HTTP headers do not mean the complete clip is buffered');
+  downloads.at(-1).finish();await settle();assert.equal(f.video.loads.length,1);assert.equal(f.video.src,created[0].url);
+  assert.equal(downloads.length,2,'only after one complete clip does the next eager download start');
+  f.video.present(.4);assert.equal(f.progress.at(-1),transitionProgress(400,0),'buffering does not replace the presented-frame clock');
+  f.player.destroy();assert.equal(downloads.at(-1).signal.aborted,true);assert.ok(revoked.includes(created[0].url));await settle();
+
+  // A requested clip takes precedence over speculative background work;
+  // no second request for the same clip or codec family is started.
+  const c=createVideoCache();let readyURL,errors=0;const start=downloads.length;
+  c.configure(urls,{preload:true});assert.equal(downloads.length,start+1);assert.equal(downloads.at(-1).url,'a');
+  c.request('d',url=>readyURL=url,()=>++errors);assert.equal(downloads[start].signal.aborted,true);assert.equal(downloads.at(-1).url,'d');
+  c.request('d',()=>{},()=>++errors);assert.equal(downloads.length,start+2,'two consumers share one fetch');
+  downloads.at(-1).headers();downloads.at(-1).finish();await settle();assert.ok(readyURL?.startsWith('blob:'));assert.equal(errors,0);
+  const beforeCached=downloads.length;c.request('d',url=>assert.equal(url,readyURL),()=>++errors);assert.equal(downloads.length,beforeCached);
+  // Pause speculative downloads after the in-flight fetch finishes.
+  c.setHidden(true);downloads.at(-1).headers();downloads.at(-1).finish();await settle();const hiddenCount=downloads.length;
+  await settle();assert.equal(downloads.length,hiddenCount);c.setHidden(false);assert.equal(downloads.length,hiddenCount+1);
+  while(downloads.at(-1).url!=='f'){downloads.at(-1).headers();downloads.at(-1).finish();await settle();}
+  downloads.at(-1).headers();downloads.at(-1).finish();await settle();
+  const completeCount=downloads.length;for(const url of urls)c.request(url,()=>{},()=>++errors);
+  assert.equal(downloads.length,completeCount,'all six clips reuse retained complete files');
+  c.destroy();await settle();
+
+  // Changing responsive sets releases all previous objects, aborts the active
+  // fetch, and never turns an obsolete response into another cached object.
+  const responsive=createVideoCache();responsive.configure(urls,{preload:true});
+  downloads.at(-1).headers();downloads.at(-1).finish();await settle();
+  const obsolete=downloads.at(-1),oldReady=created.at(-1).url,createdCount=created.length;
+  responsive.configure(urls.map(url=>'portrait-'+url),{preload:true});
+  assert.equal(obsolete.signal.aborted,true);assert.ok(revoked.includes(oldReady));
+  obsolete.headers();obsolete.finish();await settle();assert.equal(created.length,createdCount,'a canceled family cannot allocate a late Blob URL');
+  assert.equal(downloads.at(-1).url,'portrait-a');responsive.destroy();await settle();
+
+  // Data saver and reduced-motion users do not eagerly download six videos.
+  navigator.connection.saveData=true;
+  const saver=fixture({cache:createVideoCache()});const saverStart=downloads.length;
+  saver.player.showStation(0);assert.equal(downloads.length,saverStart);
+  const stop=saver.navigate(0,1);assert.equal(downloads.length,saverStart+1);stop();assert.equal(downloads.at(-1).signal.aborted,true);
+  saver.player.destroy();await settle();navigator.connection.saveData=false;
+  globalThis.matchMedia=()=>({matches:true});
+  const reduced=fixture({cache:createVideoCache()}),reducedStart=downloads.length;
+  reduced.player.showStation(0);assert.equal(downloads.length,reducedStart);reduced.player.destroy();delete globalThis.matchMedia;
+
+  // A failed background fetch can be retried on demand without poisoning the
+  // cache. A canceled subscriber must not receive completion or failure.
+  const retryCache=createVideoCache();retryCache.configure(urls,{preload:false});
+  let delivered=0;const unsubscribe=retryCache.request('a',()=>++delivered,()=>++delivered);unsubscribe();await settle();assert.equal(delivered,0);
+  retryCache.request('a',()=>++delivered,()=>++delivered);downloads.at(-1).fail();await settle();assert.equal(delivered,1);
+  retryCache.request('a',()=>++delivered,()=>++delivered);downloads.at(-1).headers();downloads.at(-1).finish();await settle();assert.equal(delivered,2);
+  retryCache.destroy();await settle();
+  const stalled=createVideoCache();stalled.configure(urls,{preload:false});let timedOut=0;
+  stalled.request('a',()=>assert.fail('stalled request cannot succeed'),()=>++timedOut);
+  advance(30016);await settle();assert.equal(timedOut,1,'a download with no progress cannot lock navigation forever');stalled.destroy();
+  // Streaming responses retain their actual MIME type, including servers that
+  // omit Content-Type for WebM, rather than silently labelling every Blob MP4.
+  globalThis.fetch=async()=>({ok:true,headers:{get:()=>null},body:{getReader(){let sent=false;return {async read(){if(sent)return {done:true};sent=true;return {done:false,value:new Uint8Array([1,2,3])};}};}}});
+  const streaming=createVideoCache();streaming.configure(['clip.webm'],{preload:false});let streamed=false;
+  streaming.request('clip.webm',()=>streamed=true,()=>assert.fail('stream download failed'));await settle();assert.equal(streamed,true);assert.equal(created.at(-1).blob.type,'video/webm');streaming.destroy();await settle();
+  assert.equal(revoked.length,created.length);assert.equal(new Set(revoked).size,created.length,'every retained Blob URL is eventually revoked exactly once');
+ }finally{globalThis.fetch=originalFetch;URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;delete globalThis.matchMedia;navigator.connection.saveData=false;}
+}
+console.log('Prerendered player: decoded-frame clock, complete-clip buffering, serial six-clip preload, priority/deduplication, responsive cache eviction, data saver/reduced motion, cancellation/retry, decoded poster handoffs and playback races passed.');

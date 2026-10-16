@@ -50,6 +50,10 @@ if(!scenario){
  const win=new Target(),doc=new Target(),media=new Target();media.matches=scenario==='reduced-motion';
  globalThis.window=win;globalThis.document=doc;globalThis.innerHeight=scenario==='short-viewport'?390:800;globalThis.innerWidth=1280;globalThis.scrollY=0;
  Object.defineProperty(globalThis,'navigator',{value:{connection:{saveData:false}},configurable:true});
+ const downloaded=[];
+ globalThis.fetch=async url=>({ok:true,blob:async()=>{downloaded.push(url);return Object.assign(new Blob(['encoded video']),{source:url});}});
+ URL.createObjectURL=blob=>'blob:'+blob.source;
+ URL.revokeObjectURL=()=>{};
  globalThis.performance={now:()=>now};globalThis.matchMedia=()=>media;globalThis.getSelection=()=>({toString:()=>''});
  globalThis.requestAnimationFrame=fn=>{rafs.set(++nextId,fn);return nextId;};globalThis.cancelAnimationFrame=id=>rafs.delete(id);
  globalThis.setTimeout=(fn,ms)=>{timers.set(++nextId,{fn,at:now+ms});return nextId;};globalThis.clearTimeout=id=>timers.delete(id);
@@ -87,7 +91,7 @@ if(!scenario){
    const queue=[...rafs.values()];rafs.clear();for(const fn of queue)fn(now);
   }
  }
- async function flush(){for(let i=0;i<12;i++)await Promise.resolve();}
+ async function flush(){for(let i=0;i<40;i++)await Promise.resolve();}
  function visible(index){
   assert.equal(copies[index].style.visibility,'visible');assert.equal(copies[index].style.opacity,'1');assert.equal(copies[index].inert,false);
   assert.equal(copies[index].style.transform,`translate(${(innerWidth-copies[index].copyWidth)/2}px, ${(innerHeight-copies[index].offsetHeight)/2}px)`,'a reading station uses an exact centered 2D translation');
@@ -116,8 +120,10 @@ if(!scenario){
   assert.equal(doc.documentElement.classList.contains('projected-text'),true);visible(0);
   assert.equal(still.src,'./media/station-0.webp');
   if(scenario==='media-clock'){
-   const initial=copies[0].style.transform;emit(next,'click');
+   const initial=copies[0].style.transform;emit(next,'click');await flush();
    assert.match(video.src,/transition-0-forward\.mp4$/);assert.equal(video.hidden,true,'a station poster remains until the first presented frame');
+   assert.ok(video.src.startsWith('blob:'),'the application plays a complete downloaded file');
+   assert.ok(downloaded.includes('./media/transition-0-forward.mp4'));
    advance(1000);assert.equal(copies[0].style.transform,initial,'elapsed wall time cannot move text before decoded frames');
    video.present(.4);assert.equal(video.hidden,false);
    assert.equal(copies[0].style.transform,expectedTransform(0,transitionProgress(400,0)),'text uses the exact presented media timestamp');
@@ -126,13 +132,13 @@ if(!scenario){
    copies.filter(copy=>copy.style.visibility==='hidden').forEach(copy=>assert.equal(copy.style.willChange,'auto'));
    const frameTransform=copies[0].style.transform;advance(2000);assert.equal(copies[0].style.transform,frameTransform,'a stalled video freezes the text at the same pose');
    video.present(7.95);endLeg();visible(1);assert.equal(still.src,'./media/station-1.webp');assert.equal(video.hidden,true);
-   emit(previous,'click');assert.match(video.src,/transition-0-reverse\.mp4$/);
+   emit(previous,'click');await flush();assert.match(video.src,/transition-0-reverse\.mp4$/);
    video.present(.4);assert.equal(copies[1].style.transform,expectedTransform(1,1-transitionProgress(400,0)),'reverse playback drives the reverse camera route');
    endLeg();visible(0);
-   emit(win,'keydown',{key:'End'});
+   emit(win,'keydown',{key:'End'});await flush();
    for(let leg=0;leg<3;leg++){
     assert.match(video.src,new RegExp(`transition-${leg}-forward\\.mp4$`));
-    video.present(.4);endLeg();visible(leg+1);
+    video.present(.4);endLeg();await flush();visible(leg+1);
     assert.equal(next.disabled,true,'multi-leg navigation stays locked through its intermediate stations');
    }
    assert.equal(previous.disabled,false,'the final exact station releases the transition lock');
@@ -142,28 +148,29 @@ if(!scenario){
    assert.equal(next.disabled,false,'autoplay denial cannot strand navigation in a busy state');
    emit(next,'click');await flush();visible(2);
   }else if(scenario==='media-failure'){
-   emit(next,'click');video.onerror();assert.match(video.src,/transition-0-forward\.webm$/,'a decode error tries the alternate format');
+   emit(next,'click');await flush();video.onerror();await flush();assert.match(video.src,/transition-0-forward\.webm$/,'a decode error tries the alternate format');
    video.onerror();visible(1);assert.equal(video.hidden,true);assert.equal(next.disabled,false);
    assert.equal(still.src,'./media/station-1.webp','both codec failures retain the requested text and station still');
-   emit(next,'click');video.present(4);
+   emit(next,'click');await flush();video.present(4);
    assert.ok(copies.every(copy=>copy.style.opacity!=='1'),'the bridge is between its stationary reading poses');
-   video.onerror();visible(1);
+   video.onerror();await flush();visible(1);
    assert.equal(still.src,'./media/station-1.webp','a codec retry restores both the source poster and its readable text while loading');
    video.present(4);advance(12016);visible(2);
    assert.equal(still.src,'./media/station-2.webp','a prolonged network/decoder stall also completes with a still');
   }else if(scenario==='paused'||scenario==='reduced-motion'){
+   if(scenario==='reduced-motion')assert.deepEqual(downloaded,[],'reduced motion does not eagerly fetch background clips');
    if(scenario==='paused')emit(play,'click');
    assert.equal(play.textContent,'Resume background');
    const frozenPoster=still.src;emit(next,'click');visible(1);
    assert.equal(video.playCalls,0);assert.equal(still.src,frozenPoster,'paused or reduced-motion navigation retains its stationary background');
    if(scenario==='paused')emit(play,'click');else{media.matches=false;emit(media,'change');}
    assert.equal(still.src,'./media/station-1.webp','resuming aligns the background with the currently selected text');
-   emit(next,'click');video.present(4);emit(play,'click');visible(2);
+   emit(next,'click');await flush();video.present(4);emit(play,'click');visible(2);
    const frozenFrame=copies[2].style.transform,playCount=video.playCalls;
    advance(transitionDuration);assert.equal(video.playCalls,playCount);assert.equal(copies[2].style.transform,frozenFrame);
    assert.equal(next.disabled,false,'pausing mid-transition releases navigation at its selected station');
   }else if(scenario==='rounded-scroll'){
-   const initial=copies[0].style.transform,transforms=[];emit(next,'click');
+   const initial=copies[0].style.transform,transforms=[];emit(next,'click');await flush();
    const end=Math.floor(textSlideDuration/3/16)*16;
    for(let time=16;time<=end;time+=16){
     video.present(time/1000);assert.equal(scrollY,0,'departure starts within one native scroll pixel');
@@ -178,7 +185,7 @@ if(!scenario){
    video.present(.6);assert.notEqual(copies[0].style.transform,exact);endLeg();visible(1);
    assert.equal(scrollY,849,'the exact text stop survives a fractional anchor rounded by native scrolling');
   }else if(scenario==='rewind-cancel'){
-   emit(next,'click');video.present(.4);
+   emit(next,'click');await flush();video.present(.4);
    const lateFrame=[...video.frames.values()][0],lateEnded=video.onended;
    emit(win,'resize');advance(32);visible(1);
    assert.equal(video.paused,true);assert.equal(still.src,'./media/station-1.webp');
@@ -187,7 +194,7 @@ if(!scenario){
    const rewind=new Target('a');rewind.href='http://localhost/#name';rewind.attributes.href='#name';rewind.attributes['data-rewind']='';
    const before=video.playCalls;emit(doc,'click',{target:rewind,button:0});advance(16);
    visible(0);assert.equal(video.playCalls,before);assert.equal(still.src,'./media/station-0.webp');assert.equal(doc.activeElement,ids.name);
-   emit(next,'click');video.present(.4);
+   emit(next,'click');await flush();video.present(.4);
    location.hash='#elsewhere';emit(win,'hashchange');visible(3);
    assert.equal(still.src,'./media/station-3.webp');assert.equal(video.paused,true,'external hash navigation cancels media and settles its exact destination');
   }

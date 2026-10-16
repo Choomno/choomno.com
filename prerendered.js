@@ -1,5 +1,6 @@
 import {transitionProgress,transitionDuration} from './transition-timing.js';
 import {portraitAspect} from './media-settings.js';
+import {createVideoCache} from './video-cache.js';
 export {masterAspect} from './media-settings.js';
 
 export const stationImage=(index,portrait=false)=>`./media/station-${index}${portrait?'-portrait':''}.webp`;
@@ -7,13 +8,19 @@ export const transitionVideo=(leg,direction,format,portrait=false)=>`./media/tra
 
 // The decoded video frame is the clock for both text and section progress.
 // A slow decoder or a stalled download therefore cannot leave the text ahead.
-export function createPrerenderedPlayer({still,video,portraitSource}){
+export function createPrerenderedPlayer({still,video,portraitSource,cache=createVideoCache()}){
  let cancelCurrent=null,playing=false,hidden=false;
  video.muted=true;video.playsInline=true;video.loop=false;
  video.preload=navigator.connection?.saveData?'metadata':'auto';
- const preferred=video.canPlayType('video/mp4; codecs="avc1.42E029"')?'mp4':'webm';
+ let preferred=video.canPlayType('video/mp4; codecs="avc1.42E029"')?'mp4':'webm';
  let shown=-1,readyPoster='',posterGeneration=0,posterTimer=0;
  const portraitViewport=()=>typeof innerWidth==='number'&&typeof innerHeight==='number'&&innerWidth/innerHeight<=portraitAspect;
+ const allowPreload=()=>!navigator.connection?.saveData&&!(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+ function configureCache(portrait=portraitViewport(),preload=allowPreload()){
+  const urls=[];for(let leg=0;leg<3;leg++)urls.push(transitionVideo(leg,1,preferred,portrait));
+  for(let leg=2;leg>=0;leg--)urls.push(transitionVideo(leg,-1,preferred,portrait));
+  cache.configure(urls,{preload});
+ }
  function cancelPoster(){++posterGeneration;clearTimeout(posterTimer);posterTimer=0;}
  function showStill(index,onReady=()=>{}){
   cancelPoster();
@@ -36,10 +43,10 @@ export function createPrerenderedPlayer({still,video,portraitSource}){
   posterTimer=setTimeout(()=>finish(false),12000);
   try{still.decode().then(()=>finish(true),()=>finish(false));}catch{finish(false);}
  }
- function showStation(index){cancelCurrent?.();showStill(index);}
+ function showStation(index){cancelCurrent?.();showStill(index,decoded=>{if(decoded)configureCache();});}
  function navigate({from,to,onProgress,onComplete}){
   cancelCurrent?.();
-  let cancelled=false,playbackReady=false,frame=0,raf=0,watchdog=0,current=from,attempt=0,playId=0,legId=0,lastTime=-1;
+  let cancelled=false,playbackReady=false,frame=0,raf=0,watchdog=0,current=from,attempt=0,playId=0,legId=0,lastTime=-1,cancelDownload=null;
   const direction=Math.sign(to-from);
   const portrait=portraitViewport();
   playing=true;
@@ -50,13 +57,13 @@ export function createPrerenderedPlayer({still,video,portraitSource}){
   function pause(){++playId;video.pause();}
   function cancel(){
    if(cancelled)return;
-   cancelled=true;playbackReady=false;clearFrames();cancelPoster();video.onended=video.onerror=video.onwaiting=video.onplaying=null;pause();
+   cancelled=true;playbackReady=false;cancelDownload?.();cancelDownload=null;clearFrames();cancelPoster();video.onended=video.onerror=video.onwaiting=video.onplaying=null;pause();
    playing=false;if(cancelCurrent===cancel)cancelCurrent=null;
   }
   cancelCurrent=cancel;
   function fallback(){
    if(cancelled)return;
-   playbackReady=false;++legId;clearFrames();pause();video.onended=video.onerror=video.onwaiting=video.onplaying=null;
+   playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;clearFrames();pause();video.onended=video.onerror=video.onwaiting=video.onplaying=null;
    showStill(to,()=>{if(cancelled)return;cancel();onProgress(to);onComplete();});
   }
   function guardDownload(){
@@ -93,13 +100,13 @@ export function createPrerenderedPlayer({still,video,portraitSource}){
   }
   function retry(id){
    if(cancelled||id!==legId)return;
-   if(attempt++===0)startLeg();else fallback();
+   if(attempt++===0){preferred=preferred==='mp4'?'webm':'mp4';startLeg();}else fallback();
   }
   function startLeg(){
    if(cancelled)return;
-   playbackReady=false;++legId;lastTime=-1;clearFrames();pause();
+   playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;lastTime=-1;clearFrames();pause();
    const id=legId;
-   const leg=Math.min(current,current+direction),format=attempt===0?preferred:preferred==='mp4'?'webm':'mp4';
+   const leg=Math.min(current,current+direction),format=preferred;
    showStill(current,decoded=>{
     if(cancelled||id!==legId)return;
     if(!decoded){fallback();return;}
@@ -120,7 +127,11 @@ export function createPrerenderedPlayer({still,video,portraitSource}){
     if(typeof Image==='function'){
      const nextPoster=new Image();nextPoster.fetchPriority='low';nextPoster.src=stationImage(current+direction,portrait);
     }
-    video.src=transitionVideo(leg,direction,format,portrait);video.load();playbackReady=true;followFrames();play();
+    configureCache(portrait);
+    cancelDownload=cache.request(transitionVideo(leg,direction,format,portrait),url=>{
+     if(cancelled||id!==legId)return;
+     video.src=url;video.load();playbackReady=true;followFrames();play();
+    },()=>{if(!cancelled&&id===legId)retry(id);});
    });
   }
   // Keep the current frame when leaving the tab; resume the same media clock.
@@ -128,7 +139,8 @@ export function createPrerenderedPlayer({still,video,portraitSource}){
   if(direction)startLeg();else showStill(to,()=>{if(cancelled)return;cancel();onProgress(to);onComplete();});
   return cancel;
  }
- function setHidden(value){hidden=value;cancelCurrent?.setHidden(value);}
- function freeze(){cancelCurrent?.();cancelPoster();video.pause();}
- return {navigate,showStation,setHidden,freeze,get playing(){return playing;},destroy:freeze};
+ function setHidden(value){hidden=value;cache.setHidden(value);cancelCurrent?.setHidden(value);}
+ function freeze(){cancelCurrent?.();cancelPoster();video.pause();configureCache(portraitViewport(),false);}
+ function destroy(){freeze();cache.destroy();}
+ return {navigate,showStation,setHidden,freeze,get playing(){return playing;},destroy};
 }
