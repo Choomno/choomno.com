@@ -1,7 +1,7 @@
 // Independent distance-parameter checks for the complete rhombic-cell renderer.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {identity,advance,rotation,translation,multiply,beamData} from '../rhombic.js';
+import {identity,advance,rotation,translation,multiply,beamData,idealRotation} from '../rhombic.js';
 const data=JSON.parse(await readFile(new URL('../rhombic-data.json',import.meta.url),'utf8'));
 const dot=(a,b)=>a.reduce((s,x,i)=>s+(i===0?-1:1)*x*b[i],0);
 const scale=(a,c)=>a.map(x=>x*c),add=(a,b)=>a.map((x,i)=>x+b[i]);
@@ -55,3 +55,28 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
  assert.equal(referenceTube(bp,bd,a,t,r).length,0);
 }
 console.log(`Rhombic checks passed: ${crossings} camera crossings; ${intersectionChecks} independent tube intersections; negative ray extensions excluded.`);
+
+// Automatic rotation fixes the observer and the ideal point's celestial direction.
+const sky=(f,u)=>{
+ const q=[-dot(f.map(r=>r[0]),u),...[1,2,3].map(j=>dot(f.map(r=>r[j]),u))];
+ return q.slice(1).map(x=>x/q[0]);
+};
+let orbitFrame=multiply(rotation(1,3,.24),rotation(2,3,.17)),ideal=[1,0,0,1];
+const anchor=sky(orbitFrame,ideal),eye=orbitFrame.map(r=>r[0]);
+for(let i=0;i<2000;i++){
+ const step=idealRotation(orbitFrame,ideal,.007);
+ ({frame:orbitFrame,ideal}=advance(orbitFrame,0,step,data,ideal));
+ sky(orbitFrame,ideal).forEach((v,j)=>close(v,anchor[j],1e-10));
+ orbitFrame.map(r=>r[0]).forEach((v,j)=>close(v,eye[j],1e-10));
+}
+// Transport the same ideal endpoint across quotient identifications during travel.
+let transported=0;
+for(let i=0;i<400;i++){
+ const step=multiply(rotation(1,3,.023),translation(.07));
+ const raw=multiply(orbitFrame,step),before=sky(raw,ideal);
+ transported+=+data.planes.some(n=>dot(raw.map(r=>r[0]),n)>1e-8);
+ ({frame:orbitFrame,ideal}=advance(orbitFrame,0,step,data,ideal));
+ sky(orbitFrame,ideal).forEach((v,j)=>close(v,before[j],1e-8));
+}
+assert.ok(transported>10);
+console.log(`Ideal-point rotation passed: stationary eye and sky anchor over 2000 frames; endpoint transported across ${transported} face crossings.`);

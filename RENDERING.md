@@ -44,7 +44,10 @@ For a face normal n, its intersection parameter is
     tanh(s) = −⟨p,n⟩ / ⟨v,n⟩.
 
 Both point and tangent are transformed by the exact face pairing and tracing
-continues in the paired cell. Camera motion uses these same identifications.
+continues in the paired cell. Camera motion uses these same identifications. Automatic motion rotates about the
+geodesic from the observer toward a fixed ideal endpoint. It fixes the camera
+position and keeps that point at infinity stationary in the image. The endpoint
+is transported through face pairings during manual travel.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
 ⟨a,u⟩=−1, and set t=u−a. A tube of hyperbolic radius r around that geodesic ray

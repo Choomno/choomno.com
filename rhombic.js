@@ -1,15 +1,30 @@
 // The complete Borromean quotient, with its rhombic dodecahedral cell skeleton.
 export {dot,identity,apply,multiply,orthonormalize,translation,rotation} from './intrinsic.js';
 import {dot,apply,multiply,orthonormalize} from './intrinsic.js';
-export function advance(frame,tet,step,data){
+export function advance(frame,tet,step,data,ideal){
  frame=multiply(frame,step);
  for(let iteration=0;iteration<64;iteration++){
   const p=frame.map(row=>row[0]);let face=-1,worst=1e-8;
   for(let f=0;f<12;f++){const value=dot(p,data.planes[f]);if(value>worst){worst=value;face=f;}}
-  if(face<0)return {frame:orthonormalize(frame),tet:0};
+  if(face<0)return {frame:orthonormalize(frame),tet:0,ideal};
   frame=multiply(data.transforms[face],frame);
+  if(ideal){ideal=apply(data.transforms[face],ideal);ideal=ideal.map(x=>x/ideal[0]);}
  }
  throw Error('Camera traversal exceeded 64 faces');
+}
+// An elliptic rotation fixing the observer and the chosen ideal endpoint.
+// The endpoint is transported through face pairings together with the camera.
+export function idealRotation(frame,ideal,angle){
+ const q=[1,2,3].map(j=>dot(frame.map(row=>row[j]),ideal));
+ const length=Math.hypot(...q),n=q.map(x=>x/length);
+ const c=Math.cos(angle),s=Math.sin(angle),v=1-c;
+ const [x,y,z]=n;
+ const r=[
+  [c+x*x*v,x*y*v-z*s,x*z*v+y*s],
+  [y*x*v+z*s,c+y*y*v,y*z*v-x*s],
+  [z*x*v-y*s,z*y*v+x*s,c+z*z*v]
+ ];
+ return [[1,0,0,0],...r.map(row=>[0,...row])];
 }
 export function beamData(data){
  const classes=[...new Set(data.vertexClasses.filter((_,i)=>data.ideal[i]))].sort();
