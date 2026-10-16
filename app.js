@@ -27,7 +27,7 @@ async function main(){
  function setOrbit(){({frame,tet}=advance(identity(),0,cellTurn(phase),data));dirty=true;}
  function updateScroll(){
   const range=document.documentElement.scrollHeight-window.innerHeight;
-  targetPhase=2*Math.PI*(range>0?Math.max(0,Math.min(1,window.scrollY/range)):0);
+  targetPhase=Math.PI*(range>0?Math.max(0,Math.min(1,window.scrollY/range)):0);
  }
  function state(){play.textContent=running?'Pause background':'Resume background';play.setAttribute('aria-pressed',String(running));}
  setOrbit();updateScroll();state();
@@ -35,21 +35,19 @@ async function main(){
   requestAnimationFrame(draw);const dt=Math.min((time-last)/1000,.1);last=time;
   if(document.hidden)return;
   if(running&&Math.abs(targetPhase-phase)>1e-6){
-   phase+=(targetPhase-phase)*(1-Math.exp(-dt*9));setOrbit();
+   phase+=(targetPhase-phase)*(1-Math.exp(-dt*3));setOrbit();
   }
   if(!dirty)return;dirty=false;
   const rect=canvas.getBoundingClientRect(),quality=Number(detail.value),ratio=Math.min(quality,1600/rect.width,1000/rect.height);
   const w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
   gl.uniformMatrix4fv(uCamera,false,new Float32Array(frame[0].flatMap((_,i)=>frame.map(row=>row[i]))));
-  gl.uniform1i(uColors,document.querySelector('#cusp-colors').checked?1:0);
+  gl.uniform1i(uColors,0);
   gl.uniform2f(uRes,w,h);gl.uniform1i(uSteps,quality<1?48:quality<1.5?96:160);gl.drawArrays(gl.TRIANGLES,0,3);
  }
  window.addEventListener('scroll',updateScroll,{passive:true});
  play.addEventListener('click',()=>{running=!running;state();});
  detail.addEventListener('change',()=>dirty=true);
- document.querySelector('#cusp-colors').addEventListener('change',()=>dirty=true);
- document.querySelector('#reset').addEventListener('click',()=>window.scrollTo({top:0,behavior:reduced.matches?'instant':'smooth'}));
  new ResizeObserver(()=>{updateScroll();dirty=true;}).observe(canvas);
  new ResizeObserver(updateScroll).observe(document.body);
  reduced.addEventListener('change',()=>{running=!reduced.matches;state();});

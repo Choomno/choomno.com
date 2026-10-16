@@ -50,9 +50,10 @@ looks inward toward the center throughout the orbit and its vertical axis
 stays fixed. At this radius the orbit approaches the ideal vertices and crosses
 fundamental faces; each pose is reduced through the actual face pairings before
 ray tracing. Each pose is a spatial rotation of a radial Lorentz boost followed
-by a half-turn of the camera. Page scroll progress drives the orbit through one complete revolution; scrolling
-up reverses it. There is no automatic time-based movement. A short exponential
-interpolation smooths scroll input. Pause background freezes the current pose;
+by a half-turn of the camera. Page scroll progress drives the orbit through half a revolution; scrolling
+up reverses it. There is no automatic time-based movement. An exponential interpolation with a 1/3-second time constant smooths scroll
+input. The sparse personal sections also distribute this movement over a longer
+page. Pause background freezes the current pose;
 Resume background synchronizes it to the current scroll position.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
