@@ -25,10 +25,10 @@ footer{position:absolute;bottom:0;left:6%;right:6%;margin-left:auto;margin-right
 /* Keep shading attached to the copy, leaving the surrounding geometry visible. */
 .viewer::after{background:#0c0e0d66}
 .reading-copy{position:relative;isolation:isolate;width:100%;max-width:620px;margin-inline:auto}
-.reading-copy::before{content:"";position:absolute;z-index:-1;inset:-95px max(-120px,calc((100% - 100vw)/2 + 12px));pointer-events:none;background:radial-gradient(ellipse closest-side at center,#0b0d0bfa 0%,#0b0d0be8 28%,#0b0d0bb8 50%,#0b0d0b60 72%,#0b0d0b18 88%,transparent 100%)}
+.reading-copy::before{content:"";position:absolute;z-index:-1;inset:-120px -220px;pointer-events:none;background:radial-gradient(ellipse closest-side at center,#0b0d0bfa 0%,#0b0d0be8 40%,#0b0d0bb8 60%,#0b0d0b60 78%,#0b0d0b18 91%,transparent 100%)}
 .intro .reading-copy>p{color:#ded8c8;font-size:15px;margin:0;text-align:center}
 .personal-section .reading-copy>p:not(.eyebrow){color:#ded8c8;font-size:15px;text-align:left;margin:0 0 18px}
 .personal-section .reading-copy>.eyebrow{color:#bdb7a8}
 .reading-copy{text-shadow:0 1px 3px #0008}
 header,footer{text-shadow:0 1px 4px #000}
-@media(max-width:650px){.viewer::after{background:#0c0e0d66}.reading-copy::before{inset:-80px -20px}}
+@media(max-width:650px){.viewer::after{background:#0c0e0d66}.reading-copy::before{inset:-100px -120px}}
