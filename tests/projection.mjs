@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {projectReadingPlane, projectReadingPlaneWithDepth, nearPlaneOpacity, readingPhase, readingPose} from '../projection.js';
+import {textPlaneDepth} from '../camera-path.js';
 import {dot, apply} from '../rhombic.js';
 const project = (m,x,y) => [(m[0]*x+m[4]*y+m[12])/(m[3]*x+m[7]*y+1),(m[1]*x+m[5]*y+m[13])/(m[3]*x+m[7]*y+1)];
 const close = (actual, expected, tolerance=1e-8) => assert.ok(Math.abs(actual-expected)<tolerance, `${actual} != ${expected}`);
@@ -7,24 +8,36 @@ for (const [vw,vh,width,height] of [[1440,900,440,280],[625,780,440,300],[390,84
  for(let i=0;i<4;i++) {
   const p=readingPhase(i), m=projectReadingPlane(p,p,width,height,vw,vh);
   const projection=projectReadingPlaneWithDepth(p,p,width,height,vw,vh);
-  assert.deepEqual(projection.matrix,m);close(projection.minimumDepth,.8);assert.equal(projection.nearOpacity,1,'reading stills retain full opacity');
+  assert.deepEqual(projection.matrix,m);close(projection.minimumDepth,textPlaneDepth);assert.equal(projection.nearOpacity,1,'reading stills retain full opacity');
   for(const [x,y] of [[0,0],[width,0],[width,height],[0,height],[width/2,height/2]]) {
    const [u,v]=project(m,x,y); close(u,(vw-width)/2+x); close(v,(vh-height)/2+y);
   }
   if(i<3){
    const next=readingPhase(i+1);
-   const departing=project(projectReadingPlane(p+.01,p,width,height,vw,vh),width/2,height/2);
-   const arriving=project(projectReadingPlane(next-.01,next,width,height,vw,vh),width/2,height/2);
+   const departing=project(projectReadingPlane(p+.0005,p,width,height,vw,vh),width/2,height/2);
+   const arriving=project(projectReadingPlane(next-.0005,next,width,height,vw,vh),width/2,height/2);
    assert.ok(departing[0]<vw/2 && arriving[0]>vw/2,'Forward motion must carry text right to left');
   }
  }
 }
+// Near text must move much more than distant scenery during the sidestep.
+assert.ok(textPlaneDepth<.01,'The text is intrinsically small and close to the portal');
+for(let i=0;i<3;i++){
+ const p=readingPhase(i),phase=p+.0002,vw=625,vh=780;
+ const station=readingPose(p),camera=readingPose(phase);
+ const text=project(projectReadingPlane(phase,p,360,300,vw,vh),180,150);
+ const distant=apply(station,[Math.cosh(2),0,0,Math.sinh(2)]);
+ const x=dot(camera.map(row=>row[1]),distant),z=dot(camera.map(row=>row[3]),distant);
+ const ambientShift=Math.abs(vh*x/(2*.82*z));
+ assert.ok(Math.abs(text[0]-vw/2)>50*ambientShift,'Text parallax must dominate the ambient view');
+ assert.ok(ambientShift<2,'The opening sidestep barely moves the distant reference');
+}
 // Independent incidence test: the rendered pixel's hyperbolic ray must meet
 // the stationary totally geodesic text plane at the selected text coordinate.
-for (const offset of [-.08, -.04, 0, .04, .07]) {
+for (const offset of [-.0003, -.00015, 0, .00015, .0003]) {
  const stationPhase=readingPhase(1),phase=stationPhase+offset;
  const camera=readingPose(phase),station=readingPose(stationPhase);
- const width=440,height=280,vw=1440,vh=900,z=.8;
+ const width=440,height=280,vw=1440,vh=900,z=textPlaneDepth;
  const half=z*.82*width/vh,vertical=half*height/width;
  const time=Math.sqrt(1+half*half+vertical*vertical+z*z);
  const x=.23*width,y=.67*height;
@@ -40,39 +53,42 @@ for (const offset of [-.08, -.04, 0, .04, .07]) {
  const actual=eye.map((v,i)=>(v+q*d[i])/Math.sqrt(1-q*q));
  actual.forEach((v,i)=>close(v,expected[i]));
 }
-// At this later camera position the stationary plane is genuinely behind us.
-// Verify this independently instead of treating a null matrix as a skipped test.
+// Locate a real clip crossing independently of the projection helper and
+// without assuming when the camera passes a now much nearer text plane.
 {
- const stationPhase=readingPhase(1),phase=stationPhase+.15;
- const station=readingPose(stationPhase),forward=readingPose(phase).map(row=>row[3]);
- const width=440,height=280,vw=1440,vh=900,z=.8;
+ const stationPhase=readingPhase(1),station=readingPose(stationPhase);
+ const width=440,height=280,vw=1440,vh=900,z=textPlaneDepth;
  const half=z*.82*width/vh,vertical=half*height/width,time=Math.sqrt(1+half*half+vertical*vertical+z*z);
- for(const [x,y] of [[0,0],[width,0],[width,height],[0,height],[.23*width,.67*height]]){
-  const worldPoint=apply(station,[time,-half+2*half*x/width,vertical-2*vertical*y/height,z]);
-  assert.ok(dot(forward,worldPoint)<0,'culled points must lie behind the camera');
+ const points=[[0,0],[width,0],[width,height],[0,height]].map(([x,y])=>
+  apply(station,[time,-half+2*half*x/width,vertical-2*vertical*y/height,z]));
+ const depths=phase=>{const forward=readingPose(phase).map(row=>row[3]);return points.map(p=>dot(forward,p));};
+ let low=stationPhase,high;
+ for(let i=1;i<=2000;i++){
+  const phase=stationPhase+readingPhase(1)*i/2000;
+  if(Math.min(...depths(phase))<=z*.025){high=phase;break;}
+  low=phase;
  }
- const culled=projectReadingPlaneWithDepth(phase,stationPhase,width,height,vw,vh);
- assert.equal(culled.matrix,null);assert.equal(culled.nearOpacity,0);
- assert.equal(projectReadingPlane(phase,stationPhase,width,height,vw,vh),null);
- // Locate the actual clip crossing, then check visibility continuously across it.
- let low=stationPhase,high=phase;
- for(let i=0;i<50;i++){
+ assert.ok(high,'The route must exercise a real clip crossing');
+ for(let i=0;i<45;i++){
   const middle=(low+high)/2;
-  if(projectReadingPlaneWithDepth(middle,stationPhase,width,height,vw,vh).minimumDepth>.02)low=middle;else high=middle;
+  if(Math.min(...depths(middle))>z*.025)low=middle;else high=middle;
  }
- const before=projectReadingPlaneWithDepth(low-1e-6,stationPhase,width,height,vw,vh);
- const after=projectReadingPlaneWithDepth(high+1e-6,stationPhase,width,height,vw,vh);
+ const before=projectReadingPlaneWithDepth(low-1e-7,stationPhase,width,height,vw,vh);
+ const after=projectReadingPlaneWithDepth(high+1e-7,stationPhase,width,height,vw,vh);
  assert.ok(before.matrix);assert.equal(after.matrix,null);
- assert.equal(before.nearOpacity,0);assert.equal(after.nearOpacity,0,'the hard clip occurs only after a complete fade');
+ assert.equal(before.nearOpacity,0);assert.equal(after.nearOpacity,0,'The hard clip occurs only after a complete fade');
+ assert.equal(projectReadingPlane(high+1e-7,stationPhase,width,height,vw,vh),null);
+ close(after.minimumDepth,Math.min(...depths(high+1e-7)),1e-10);
 }
 // The fade is monotone and C2 where it joins fully hidden/fully opaque states.
-assert.equal(nearPlaneOpacity(-1),0);assert.equal(nearPlaneOpacity(.2),0);
-assert.equal(nearPlaneOpacity(.7),1);assert.equal(nearPlaneOpacity(.8),1);
+assert.equal(nearPlaneOpacity(-1),0);assert.equal(nearPlaneOpacity(textPlaneDepth*.25),0);
+assert.equal(nearPlaneOpacity(textPlaneDepth*.875),1);assert.equal(nearPlaneOpacity(textPlaneDepth),1);
 let previous=0;
-for(let i=0;i<=100;i++){const opacity=nearPlaneOpacity(.2+i*.005);assert.ok(opacity>=previous-1e-14);previous=opacity;}
+for(let i=0;i<=100;i++){const opacity=nearPlaneOpacity(textPlaneDepth*(.25+i*.00625));assert.ok(opacity>=previous-1e-14);previous=opacity;}
 const epsilon=1e-5;
-for(const [boundary,direction,level] of [[.2,1,0],[.7,-1,1]]){
- const first=nearPlaneOpacity(boundary+direction*epsilon),second=nearPlaneOpacity(boundary+direction*2*epsilon);
+const relativeOpacity=x=>nearPlaneOpacity(textPlaneDepth*x);
+for(const [boundary,direction,level] of [[.25,1,0],[.875,-1,1]]){
+ const first=relativeOpacity(boundary+direction*epsilon),second=relativeOpacity(boundary+direction*2*epsilon);
  assert.ok(Math.abs(first-level)/epsilon<1e-6,'opacity speed vanishes at the fade boundary');
  assert.ok(Math.abs(second-2*first+level)/(epsilon*epsilon)<.01,'opacity acceleration vanishes at the fade boundary');
 }

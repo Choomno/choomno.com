@@ -1,4 +1,5 @@
 // A gesture selects one reading pose; its momentum cannot select a second pose.
+export const transitionDuration=4800;
 const interactive='a,button,input,select,textarea,summary,details,[contenteditable="true"]';
 const editable='input,select,textarea,[contenteditable="true"]';
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
@@ -53,7 +54,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{}}={}){
  function goTo(index,{immediate=false,updateHash=true,interrupt=false}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
   stop();active=clamp(index,0,sections.length-1);
-  const start=scrollY,end=position(active),legDuration=immediate||reduced.matches?0:1450;
+  const start=scrollY,end=position(active),legDuration=immediate||reduced.matches?0:transitionDuration;
   const direction=Math.sign(end-start);
   // Each camera leg meets its neighbors with zero velocity and acceleration.
   // A long jump must therefore ease separately through every reading anchor.

@@ -7,6 +7,7 @@ const canvas=document.querySelector('#space');
 const play=document.querySelector('#play'),detail=document.querySelector('#detail');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 let running=!reduced.matches, phase=0, targetPhase=0, dirty=true, renderer=null, navigation=null;
+let lastMotionTime=-Infinity, motionRendering=false;
 
 async function createRenderer(){
  const gl=canvas.getContext('webgl2',{alpha:false,antialias:false});
@@ -18,14 +19,15 @@ async function createRenderer(){
  void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0.,1.);}`));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,scene.fragment));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
  const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,scene.width,scene.height,0,gl.RGBA,gl.FLOAT,scene.texels);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  const uniform=name=>gl.getUniformLocation(program,name),uCamera=uniform('camera'),uCell=uniform('cameraCell'),uRes=uniform('resolution'),uSteps=uniform('maxSteps');gl.uniform1i(uniform('manifold'),0);
- return angle=>{
+ return (angle,moving=false)=>{
   const {frame,cell}=advance(identity(),0,readingPose(angle),data);
-  const rect=canvas.getBoundingClientRect(),quality=Number(detail.value),ratio=Math.min(quality,1600/rect.width,1000/rect.height);
+  const rect=canvas.getBoundingClientRect(),quality=Number(detail.value);
+  const ratio=moving?Math.min(quality,.8,1000/rect.width,700/rect.height):Math.min(quality,1600/rect.width,1000/rect.height);
   const w=Math.max(1,Math.round(rect.width*ratio)),h=Math.max(1,Math.round(rect.height*ratio));
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
   gl.uniformMatrix4fv(uCamera,false,new Float32Array(frame[0].flatMap((_,i)=>frame.map(row=>row[i]))));
   gl.uniform1i(uCell,cell);gl.uniform1f(uniform('beamRadius'),.025);
-  gl.uniform2f(uRes,w,h);gl.uniform1i(uSteps,quality<1?96:quality<1.5?160:240);gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.uniform2f(uRes,w,h);gl.uniform1i(uSteps,quality<1?64:quality<1.5?112:160);gl.drawArrays(gl.TRIANGLES,0,3);
  };
 }
 
@@ -49,12 +51,15 @@ function resize(){
  setTextProjection(fit);
  navigation?.refresh();updateScroll();updateText();dirty=true;
 }
-function draw(){
+function draw(time){
  requestAnimationFrame(draw);
  if(document.hidden)return;
  // Navigation already eases its progress. Use that exact pose for both layers.
- if(running&&phase!==targetPhase){phase=targetPhase;updateText();dirty=true;}
- if(renderer&&dirty){dirty=false;renderer(phase);}
+ if(running&&phase!==targetPhase){phase=targetPhase;updateText();dirty=true;lastMotionTime=time;}
+ // Keep motion economical, then redraw once at full still quality after settling.
+ const moving=running&&time-lastMotionTime<120;
+ if(moving!==motionRendering){motionRendering=moving;dirty=true;}
+ if(renderer&&dirty){dirty=false;renderer(phase,motionRendering);}
 }
 async function main(){
  await document.fonts.ready;

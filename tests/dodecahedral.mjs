@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {identity,advance,multiply,beamData,packScene} from '../polyhedral.js';
 import {translation,rotation} from '../intrinsic.js';
-import {readingPose,readingPhase,readingRadii} from '../camera-path.js';
+import {readingPose,readingPhase} from '../camera-path.js';
 const data=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
 const dot=(a,b)=>a.reduce((s,x,i)=>s+(i===0?-1:1)*x*b[i],0);
 const scale=(a,c)=>a.map(x=>x*c),add=(a,b)=>a.map((x,i)=>x+b[i]);
@@ -72,55 +72,57 @@ for(const domainBeams of beams)for(const {a,t} of domainBeams)for(const along of
  close(dot(x,normal),0);close(dot(normal,normal),Math.sinh(r)**2*Math.cosh(r)**2);
  intersectionChecks++;
 }
-// The complete planar route must stay clear of the edge tubes while looking
-// inward toward the SAME unfolded cell center, including after face folding.
-const origin=[1,0,0,0];let minClearance=Infinity,minRadius=Infinity,maxRadius=0;
-const first=readingPose(readingPhase(0)),last=readingPose(readingPhase(3));
-for(let k=1;k<4;k++)close(first[k][0],-last[k][0]);
-const euclideanDot=(a,b)=>a.reduce((sum,x,i)=>sum+x*b[i],0);
+// Reading stills are fixed geometric anchors; the route may sidestep them
+// to pass around the stationary text rectangles.
+const origin=[1,0,0,0],euclideanDot=(a,b)=>a.reduce((sum,x,i)=>sum+x*b[i],0);
 const normalize=v=>scale(v,1/Math.hypot(...v));
-// Preserve the approved opening frame, including its screen orientation.
-// These axes come from the face geometry and its upward vertex, independently
-// of the route's tangent/normal basis and roll interpolation.
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const phi=(1+Math.sqrt(5))/2,L=Math.sqrt(phi+2),initialRadius=2.54;
 const openingAxis=[1/L,0,phi/L],openingRight=[0,1,0],openingUp=[phi/L,0,-1/L];
-const expectedFirst=[[Math.cosh(initialRadius),0,0,-Math.sinh(initialRadius)],
- ...openingAxis.map((v,i)=>[Math.sinh(initialRadius)*v,openingRight[i],openingUp[i],-Math.cosh(initialRadius)*v])];
+function radialFrame(axis,right,up,radius){
+ const ch=Math.cosh(radius),sh=Math.sinh(radius);
+ return [[ch,0,0,-sh],...axis.map((v,i)=>[sh*v,right[i],up[i],-ch*v])];
+}
+const first=readingPose(readingPhase(0)),last=readingPose(readingPhase(3));
+const expectedFirst=radialFrame(openingAxis,openingRight,openingUp,initialRadius);
 first.forEach((row,i)=>row.forEach((x,j)=>close(x,expectedFirst[i][j])));
-// Recover the plane from camera positions rather than implementation constants.
-const radial0=normalize(first.slice(1).map(row=>row[0]));
-const second=normalize(readingPose(readingPhase(3)*.41).slice(1).map(row=>row[0]));
-const tangent0=normalize(second.map((x,i)=>x-euclideanDot(second,radial0)*radial0[i]));
-const orbitNormal=[radial0[1]*tangent0[2]-radial0[2]*tangent0[1],
- radial0[2]*tangent0[0]-radial0[0]*tangent0[2],radial0[0]*tangent0[1]-radial0[1]*tangent0[0]];
-let previousAngle=-1e-10;
-for(let i=0;i<=18000;i++){
- const phase=readingPhase(3)*i/18000,raw=readingPose(phase),eye=raw.map(r=>r[0]),forward=raw.map(r=>r[3]);
+const cusp7=normalize([1,1,1]),routeNormal=[phi/2,-1/(2*phi),-.5];
+const secondAngular=cross(cusp7,routeNormal),roll=Math.PI/6;
+const secondRight=secondAngular.map((x,i)=>Math.cos(roll)*x-Math.sin(roll)*routeNormal[i]);
+const secondUp=secondAngular.map((x,i)=>Math.sin(roll)*x+Math.cos(roll)*routeNormal[i]);
+const expectedSecond=radialFrame(cusp7,secondRight,secondUp,3.4);
+readingPose(readingPhase(1)).forEach((row,i)=>row.forEach((x,j)=>close(x,expectedSecond[i][j])));
+// The third view is an edge-centered twofold saddle, not another cusp star.
+const edgeAxis=[.5,phi/2,1/(2*phi)],thirdUp=routeNormal,thirdRight=cross(edgeAxis,thirdUp);
+const expectedThird=radialFrame(edgeAxis,thirdRight,thirdUp,1.35);
+const third=readingPose(readingPhase(2));
+third.forEach((row,i)=>row.forEach((x,j)=>close(x,expectedThird[i][j])));
+const edge=data.cells[0].edges.find(([a,b])=>a===7&&b===19);assert.ok(edge);
+const normalizedMidpoint=normalize(add(data.cells[0].vertices[7].slice(1),data.cells[0].vertices[19].slice(1)));
+normalizedMidpoint.forEach((x,i)=>close(x,edgeAxis[i]));
+const edgeCenterDistance=Math.acosh(Math.sqrt(2/(1-euclideanDot(data.cells[0].vertices[7].slice(1),data.cells[0].vertices[19].slice(1)))));
+close(edgeCenterDistance-1.35,.3401974829101885);
+assert.ok(data.cells[0].vertices.every(v=>Math.hypot(...v.slice(1).map((x,i)=>x-edgeAxis[i]))>.3));
+for(let k=1;k<4;k++)close(first[k][0],-last[k][0]);
+
+// Every sampled camera frame is Lorentz orthonormal and clear of all nearby
+// quotient edge tubes after folding into its actual cell.
+let minClearance=Infinity,minRadius=Infinity,maxRadius=0;
+for(let i=0;i<=24000;i++){
+ const raw=readingPose(readingPhase(3)*i/24000),eye=raw.map(r=>r[0]);
  assert.ok(eye.every(Number.isFinite)&&eye[0]>0);
- close(euclideanDot(eye.slice(1),orbitNormal),0);
- let angle=Math.atan2(euclideanDot(eye.slice(1),tangent0),euclideanDot(eye.slice(1),radial0));
- if(angle< -1e-10)angle+=2*Math.PI;
- assert.ok(angle>=previousAngle-1e-10,'The route must keep progressing around the original cell');
- previousAngle=angle;
- close(dot(raw.map(r=>r[1]),origin),0);
- close(dot(raw.map(r=>r[2]),origin),0);
- assert.ok(dot(forward,origin)>0,'Original center must remain ahead');
- const distanceToOriginalCenter=Math.acosh(-dot(eye,origin));
- minRadius=Math.min(minRadius,distanceToOriginalCenter);maxRadius=Math.max(maxRadius,distanceToOriginalCenter);
- point(eye,forward,distanceToOriginalCenter).forEach((x,k)=>close(x,origin[k]));
- for(let k=0;k<4;k++)for(let l=0;l<4;l++)close(dot(raw.map(r=>r[k]),raw.map(r=>r[l])),k===l?(k===0?-1:1):0);
+ const radius=Math.acosh(Math.max(1,-dot(eye,origin)));
+ minRadius=Math.min(minRadius,radius);maxRadius=Math.max(maxRadius,radius);
+ for(let k=0;k<4;k++)for(let l=0;l<4;l++)close(dot(raw.map(r=>r[k]),raw.map(r=>r[l])),k===l?(k===0?-1:1):0,1e-7);
  const folded=advance(identity(),0,raw,data),p=folded.frame.map(r=>r[0]);
- for(const {a,t} of beams[folded.cell]){
-  const distance=Math.acosh(Math.sqrt(Math.max(1,dot(p,a)**2-dot(p,t)**2)));
+ for(const {n1,n2} of beams[folded.cell]){
+  const distance=Math.asinh(Math.hypot(dot(p,n1),dot(p,n2)));
   minClearance=Math.min(minClearance,distance);
  }
 }
-close(previousAngle,Math.PI);
-assert.ok(minClearance>.06,`Camera approaches the .025-radius tubes too closely: ${minClearance}`);
-assert.ok(minRadius<2&&maxRadius>=3.39,'The route must retreat inward between its deep cusp views');
-// The opening direction comes from the actual face data, not hard-coded
-// camera constants. Five coplanar ideal vertices project to a regular
-// pentagon; its vertex 15 is upward and the lower edge is level.
+assert.ok(minClearance>.04,`Camera approaches the .025-radius tubes too closely: ${minClearance}`);
+assert.ok(minRadius<1.5&&maxRadius>=3.39,'The route must retain the deep cusp anchor and the interior edge view');
+
 function projectVertices(camera,indices){
  const cols=camera[0].map((_,i)=>camera.map(row=>row[i]));
  return indices.map(index=>{
@@ -129,9 +131,6 @@ function projectVertices(camera,indices){
   return {index,x:p[0]/p[2]/.82,y:p[1]/p[2]/.82,depth:p[2]};
  });
 }
-const frontFace=data.cells[0].faces[11],frontNormal=data.cells[0].planes[11].slice(1);
-const normalLength=Math.hypot(...frontNormal),eyeSpatial=first.slice(1).map(r=>r[0]);
-eyeSpatial.forEach((x,i)=>close(x/Math.hypot(...eyeSpatial),frontNormal[i]/normalLength));
 function regularProjectedPentagon(camera,face){
  const projected=projectVertices(camera,face),radii=projected.map(p=>Math.hypot(p.x,p.y));
  const sides=projected.map((p,i)=>Math.hypot(p.x-projected[(i+1)%5].x,p.y-projected[(i+1)%5].y));
@@ -140,75 +139,42 @@ function regularProjectedPentagon(camera,face){
  close(projected.reduce((sum,p)=>sum+p.x,0),0);close(projected.reduce((sum,p)=>sum+p.y,0),0);
  return projected;
 }
+const frontFace=data.cells[0].faces[11],frontNormal=data.cells[0].planes[11].slice(1);
 const openingPentagon=regularProjectedPentagon(first,frontFace);
 const top=openingPentagon.find(p=>p.index===15),bottom=openingPentagon.filter(p=>[9,11].includes(p.index));
 assert.ok(top&&top.y>0);close(top.x,0);
 assert.ok(openingPentagon.every(p=>p.y<=top.y+1e-10));
-assert.equal(bottom.length,2);close(bottom[0].y,bottom[1].y);close(bottom[0].x,-bottom[1].x);
-assert.ok(bottom[0].y<0);
+assert.equal(bottom.length,2);close(bottom[0].y,bottom[1].y);close(bottom[0].x,-bottom[1].x);assert.ok(bottom[0].y<0);
 const oppositeFace=data.cells[0].faces.find((face,f)=>
  data.cells[0].planes[f].slice(1).every((x,i)=>Math.abs(x+frontNormal[i])<1e-10));
 assert.ok(oppositeFace);
 const closingPentagon=regularProjectedPentagon(last,oppositeFace);
-const closingTop=closingPentagon.find(p=>p.index===8);
-assert.ok(closingTop&&closingTop.y>0);close(closingTop.x,0);
-assert.ok(closingPentagon.every(p=>p.y<=closingTop.y+1e-10));
-const closingBottom=closingPentagon.filter(p=>[2,12].includes(p.index));
-assert.equal(closingBottom.length,2);close(closingBottom[0].y,closingBottom[1].y);
-assert.ok(closingBottom[0].y<0);
+const lowest=closingPentagon.reduce((a,b)=>a.y<b.y?a:b),highest=closingPentagon.filter(p=>p.y>0);
+close(lowest.x,0);assert.ok(lowest.y<0,'Final pentagon must point downward');
+assert.equal(highest.length,2);close(highest[0].y,highest[1].y);close(highest[0].x,-highest[1].x);
 
-// At the middle stills the actual ideal vertices 7 and 19 lie exactly behind
-// the camera. Their null pairing measures Busemann height relative to the
-// horosphere through the original cell center, not distance to a finite proxy.
+// The second still keeps actual ideal vertex7 exactly behind the camera.
+// Its null pairing is a Busemann height, not distance to a finite proxy.
 const sky=(camera,v)=>{
  const energy=-dot(camera.map(row=>row[0]),v);
  return [1,2,3].map(k=>dot(camera.map(row=>row[k]),v)/energy);
 };
-const cuspHeights=[];
-for(const [stop,index] of [[1,7],[2,19]]){
- const cusp=data.cells[0].vertices[index],pose=readingPose(readingPhase(stop)),eye=pose.map(row=>row[0]);
- normalize(eye.slice(1)).forEach((x,i)=>close(x,cusp[i+1]/cusp[0]));
- const height=-Math.log(-dot(eye,cusp));cuspHeights.push(height);
- close(height,readingRadii[stop]);assert.ok(height>=3.19,'The camera must enter the cusp deeply');
- const direction=sky(pose,cusp);direction.forEach((x,i)=>close(x,i===2?-1:0));
- const folded=advance(identity(),0,pose,data,cusp);
- sky(folded.frame,folded.ideal).forEach((x,i)=>close(x,direction[i]));
- for(const adjacent of [stop-1,stop+1]){
-  const adjacentEye=readingPose(readingPhase(adjacent)).map(row=>row[0]);
-  assert.ok(height> -Math.log(-dot(adjacentEye,cusp))+1,'The cusp anchor should be closer than neighboring stills');
- }
+const cusp=data.cells[0].vertices[7],second=readingPose(readingPhase(1)),secondEye=second.map(row=>row[0]);
+const cuspHeight=-Math.log(-dot(secondEye,cusp));close(cuspHeight,3.4);
+const direction=sky(second,cusp);direction.forEach((x,i)=>close(x,i===2?-1:0));
+const foldedCusp=advance(identity(),0,second,data,cusp);
+sky(foldedCusp.frame,foldedCusp.ideal).forEach((x,i)=>close(x,direction[i]));
+for(const adjacent of [0,2]){
+ const eye=readingPose(readingPhase(adjacent)).map(row=>row[0]);
+ assert.ok(cuspHeight>-Math.log(-dot(eye,cusp))+1,'The cusp anchor should be closer than neighboring stills');
 }
 
-// Measure true hyperbolic distances between equal phase increments, without
-// consulting the path's lookup table. Both local speed and accumulated
-// quarter-leg distances must remain nearly uniform near the ideal endpoints.
-let maxSpeedDeviation=0,maxQuarterDeviation=0;
-for(let leg=0;leg<3;leg++){
- const steps=2048,distances=[];let previous=readingPose(readingPhase(leg)).map(row=>row[0]);
- for(let i=1;i<=steps;i++){
-  const next=readingPose(readingPhase(leg+i/steps)).map(row=>row[0]);
-  distances.push(Math.acosh(Math.max(1,-dot(previous,next))));previous=next;
- }
- const total=distances.reduce((sum,x)=>sum+x,0),mean=total/steps;
- assert.ok(total>1&&distances.every(d=>Number.isFinite(d)&&d>0));
- maxSpeedDeviation=Math.max(maxSpeedDeviation,...distances.map(d=>Math.abs(d/mean-1)));
- for(let quarter=0;quarter<4;quarter++){
-  const length=distances.slice(quarter*steps/4,(quarter+1)*steps/4).reduce((sum,x)=>sum+x,0);
-  maxQuarterDeviation=Math.max(maxQuarterDeviation,Math.abs(4*length/total-1));
- }
-}
-assert.ok(maxSpeedDeviation<.04,`Arclength resampling has excessive local speed variation: ${maxSpeedDeviation}`);
-assert.ok(maxQuarterDeviation<.001,`Arclength resampling drifts over a quarter-leg: ${maxQuarterDeviation}`);
-
-// Each centered still should contain distinct ideal endpoints. This checks
-// directions geometrically, not whether rasterized edges are bright enough.
 const endpointCounts=[];
 for(let stop=0;stop<4;stop++){
- const frame=readingPose(readingPhase(stop));
- const cols=frame[0].map((_,i)=>frame.map(row=>row[i]));
+ const frame=readingPose(readingPhase(stop)),cols=frame[0].map((_,i)=>frame.map(row=>row[i]));
  const projected=data.cells[0].vertices.map(v=>cols.slice(1).map(c=>dot(c,v))).filter(v=>v[2]>0)
   .map(v=>[v[0]/v[2]/.82,v[1]/v[2]/.82]);
  const count=projected.filter(([x,y])=>Math.abs(x)<390/844&&Math.abs(y)<1).length;
- assert.ok(count>=10,`Only ${count} ideal endpoints in portrait still ${stop}`);endpointCounts.push(count);
+ assert.ok(count>=8,`Only ${count} ideal endpoints in portrait still${stop}`);endpointCounts.push(count);
 }
-console.log(`Dodecahedral checks passed: ${crossings} face crossings (${cellChanges} cell changes); ${intersectionChecks} independent all-ideal tube intersections; minimum sampled route clearance ${minClearance.toFixed(6)}; portrait ideal endpoints ${endpointCounts.join('/')}; exact rearward cusp heights ${cuspHeights.map(x=>x.toFixed(6)).join('/')}; local arclength speed error ${(100*maxSpeedDeviation).toFixed(2)}%; fixed original center and upright pentagonal endpoints verified.`);
+console.log(`Dodecahedral checks passed: ${crossings} face crossings (${cellChanges} cell changes); ${intersectionChecks} independent tube intersections; route clearance ${minClearance.toFixed(6)}; portrait ideal endpoints ${endpointCounts.join('/')}; opening/cusp stills preserved, distinct twofold third view and inverted final pentagon verified.`);

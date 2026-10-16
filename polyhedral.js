@@ -82,7 +82,7 @@ void main(){
  vec4 p=camera[0],d=camera*vec4(0.,normalize(vec3(uv*.82,1.)));
  vec3 background=vec3(.0035,.0033,.0031);
  int cell=cameraCell,entry=-1;float total=0.;float sr=sinh(beamRadius),sr2=sr*sr;
- for(int step=0;step<240;step++){
+ for(int step=0;step<160;step++){
   if(step>=maxSteps)break;
   float qFace=1.;int face=-1;
   for(int f=0;f<${faces};f++){
@@ -117,7 +117,7 @@ void main(){
    vec3 mapped=vec3(1.)-exp(-lit*1.65);
    pixel=vec4(pow(mix(background,mapped,visibility),vec3(1./2.2)),1.);return;
   }
-  if(face<0||qFace>=.999999||total>32.)break;
+  if(face<0||qFace>=.999999||total>20.)break;
   float c=inversesqrt(max(1.-qFace*qFace,1e-12));
   vec4 nextP=c*(p+qFace*d),nextD=c*(d+qFace*p);
   mat4 m=pairing(cell,face);vec4 meta=datum(cell,face,7);

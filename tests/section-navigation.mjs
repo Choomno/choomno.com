@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import {WheelIntent,initSectionNavigation} from '../section-navigation.js';
+import {WheelIntent,initSectionNavigation,transitionDuration} from '../section-navigation.js';
+
+assert.equal(transitionDuration,4800,'each normal transition should last 4.8 seconds');
 
 // Trackpad deltas accumulate, while all momentum in one gesture is consumed.
 const intent=new WheelIntent();
@@ -56,17 +58,18 @@ assert.equal(nav.active,2,'a heading hash selects its containing section');
 assert.equal(scrollY,1650.125,'fractional section heights retain precise center positions');
 nav.goTo(0,{immediate:true});assert.equal(scrollY,0,'opening pose leaves header visible');
 nav.goTo(1);assert.equal(nav.goTo(2),false,'transitions cannot be interrupted by another gesture');
-advance(1600);assert.equal(scrollY,849.25);
+advance(transitionDuration/2);assert.ok(Math.abs(scrollY-849.25/2)<1e-9,'the longer transition is only halfway through at 2.4 seconds');
+advance(transitionDuration/2);assert.equal(scrollY,849.25);
 assert.equal(emit(win,'keydown',{key:'ArrowDown',repeat:true}).defaultPrevented,true);assert.equal(nav.active,1);
-const link=new Target('a');emit(win,'keydown',{key:'PageDown',target:link});assert.equal(nav.active,2,'paging works while a link is focused');advance(1600);
+const link=new Target('a');emit(win,'keydown',{key:'PageDown',target:link});assert.equal(nav.active,2,'paging works while a link is focused');advance(transitionDuration);
 const input=new Target('input');assert.equal(emit(win,'keydown',{key:'Home',target:input}).defaultPrevented,false);assert.equal(nav.active,2);
 assert.equal(emit(win,'wheel',{deltaY:100,deltaX:0,ctrlKey:true}).defaultPrevented,false,'pinch/zoom is not intercepted');
-geometry[1][0]+=.25;nav.goTo(1,{immediate:true});globalThis.scrollY=849;nav.goTo(2);advance(1450);
+geometry[1][0]+=.25;nav.goTo(1,{immediate:true});globalThis.scrollY=849;nav.goTo(2);advance(transitionDuration);
 assert.equal(scrollY,1650.125,'pixel rounding at a settled anchor must not create an extra near-stationary leg');
 geometry[1][0]-=.25;
 // Multi-section requests visit every anchor, easing to rest before changing route legs.
 nav.goTo(0,{immediate:true});emit(win,'keydown',{key:'End'});assert.equal(nav.active,3);
-advance(1440);const before10=scrollY;
+advance(transitionDuration-10);const before10=scrollY;
 advance(5);const before5=scrollY;
 advance(5);const firstStop=scrollY;assert.equal(firstStop,849.25,'End pauses precisely at the first intermediate anchor');
 assert.equal(nav.goTo(0),false,'a multi-leg transition remains atomic between legs');
@@ -75,18 +78,18 @@ advance(5);const after10=scrollY;
 assert.ok(Math.abs(firstStop-before5)/5<.001&&Math.abs(after5-firstStop)/5<.001,'speed vanishes on both sides of an intermediate anchor');
 assert.ok(Math.abs(firstStop-2*before5+before10)/25<.0002&&Math.abs(after10-2*after5+firstStop)/25<.0002,'acceleration vanishes before and after changing route legs');
 assert.ok(before10<before5&&before5<firstStop&&firstStop<after5&&after5<after10,'there is no overshoot or reversal at the stop');
-advance(1440);assert.equal(scrollY,1650.125,'End reaches the next anchor after another full leg');
-advance(1450);assert.equal(scrollY,2450,'End completes only after all three legs');
+advance(transitionDuration-10);assert.equal(scrollY,1650.125,'End reaches the next anchor after another full leg');
+advance(transitionDuration);assert.equal(scrollY,2450,'End completes only after all three legs');
 emit(win,'keydown',{key:'Home'});
-for(const y of [1650.125,849.25,0]){advance(1450);assert.equal(scrollY,y,'Home traverses the same anchors in reverse');}
+for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'Home traverses the same anchors in reverse');}
 const distantLink=new Target('a');distantLink.href='http://localhost/#elsewhere';distantLink.attributes.href='#elsewhere';
 assert.equal(emit(doc,'click',{target:distantLink,button:0}).defaultPrevented,true);
-for(const y of [849.25,1650.125,2450]){advance(1450);assert.equal(scrollY,y,'an internal link traverses consecutive legs');}
+for(const y of [849.25,1650.125,2450]){advance(transitionDuration);assert.equal(scrollY,y,'an internal link traverses consecutive legs');}
 const homeLink=new Target('a');homeLink.href='http://localhost/#name';homeLink.attributes.href='#name';
 emit(doc,'pointerdown',{target:homeLink});emit(doc,'focusin',{target:new Target('header')});
 assert.equal(nav.active,3,'pointer focus must not bypass a link transition');
 emit(doc,'click',{target:homeLink,button:0});
-for(const y of [1650.125,849.25,0]){advance(1450);assert.equal(scrollY,y,'the header home link traverses every reverse leg');}
+for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'the header home link traverses every reverse leg');}
 nav.goTo(2,{immediate:true});
 
 // A second finger invalidates the first-finger swipe through all touchend events.

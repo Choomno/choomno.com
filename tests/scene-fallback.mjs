@@ -2,16 +2,17 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {transitionDuration} from '../section-navigation.js';
 
 const scenario=process.argv[2];
 if(!scenario){
- for(const name of ['no-webgl','data-failure','paused','reduced-motion']){
+ for(const name of ['no-webgl','data-failure','paused','reduced-motion','motion-quality']){
   const result=spawnSync(process.execPath,['--experimental-default-type=module',fileURLToPath(import.meta.url),name],{encoding:'utf8'});
   assert.equal(result.status,0,`${name}: ${result.stdout}${result.stderr}`);
  }
- console.log('Scene integration: graphics failures preserve text/navigation; paused and reduced-motion scenes navigate independently; short viewports use readable document flow.');
+ console.log('Scene integration: graphics failures preserve text/navigation; paused and reduced-motion scenes navigate independently; short viewports use readable document flow; motion resolution automatically restores full-quality stills.');
 }else{
- let now=0,rafId=0,rafs=new Map(),draws=[];
+ let now=0,rafId=0,rafs=new Map(),draws=[],frames=[],stepBudget=0;
  class Target {
   constructor(kind=''){this.kind=kind;this.listeners=new Map();this.attributes={};this.children=[];this.style={};}
   addEventListener(type,fn){if(!this.listeners.has(type))this.listeners.set(type,new Set());this.listeners.get(type).add(fn);}
@@ -61,6 +62,8 @@ if(!scenario){
  const gl=new Proxy({
   createShader:()=>({}),createProgram:()=>({}),createTexture:()=>({}),getShaderParameter:()=>true,getProgramParameter:()=>true,getUniformLocation:(_,name)=>name,
   uniformMatrix4fv:(name,transpose,values)=>{if(name==='camera')draws.push([...values]);},
+  uniform1i:(name,value)=>{if(name==='maxSteps')stepBudget=value;},
+  drawArrays:()=>frames.push({width:canvas.width,height:canvas.height,steps:stepBudget,time:now,camera:draws.at(-1)}),
  },{get(target,key){return key in target?target[key]:String(key).toUpperCase()===key?1:()=>{};}});
  canvas.getContext=()=>scenario==='no-webgl'?null:gl;
  const manifold=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
@@ -85,14 +88,39 @@ if(!scenario){
   assert.equal(play.disabled,true);assert.equal(detail.disabled,true);
   assert.equal(warnings.length,1);assert.match(warnings[0],scenario==='no-webgl'?/WebGL 2 unavailable/:/Manifold data could not be loaded/);
   const initial=scenario==='data-failure'?1:0;visible(initial);
-  emit(next,'click');advance(1600);visible(initial+1);
+  emit(next,'click');advance(transitionDuration+160);visible(initial+1);
   assert.equal(draws.length,0,'graphics failure does not prevent selecting the next text plane');
+ }else if(scenario==='motion-quality'){
+  assert.equal(warnings.length,0);visible(0);
+  assert.equal(frames.at(-1).width,1600);assert.equal(frames.at(-1).height,1000);assert.equal(frames.at(-1).steps,112);
+  emit(next,'click');advance(transitionDuration/2);
+  assert.equal(next.disabled,true,'the transition remains in progress at its halfway point');
+  assert.equal(frames.at(-1).width,1000);assert.equal(frames.at(-1).height,625);
+  assert.ok(canvas.width/innerWidth<=.8&&canvas.height<=700,'moving resolution obeys both pixel-ratio and dimension caps');
+  assert.equal(frames.at(-1).steps,112);
+  advance(transitionDuration/2+160);visible(1);
+  const lastMoving=frames.findLastIndex(frame=>frame.width===1000);
+  const restored=frames[lastMoving+1];
+  assert.ok(lastMoving>=0&&restored,'motion must be followed by an automatic full-quality redraw');
+  assert.equal(restored.width,1600);assert.equal(restored.height,1000);
+  assert.ok(restored.time-frames[lastMoving].time>=120,'restoration waits for at least 120ms of camera stability');
+  assert.ok(restored.time-frames[lastMoving].time<=136,'restoration occurs on the first eligible animation frame');
+  assert.deepEqual(restored.camera,frames[lastMoving].camera,'the quality redraw preserves the settled camera pose');
+  const stableDrawCount=frames.length;advance(500);assert.equal(frames.length,stableDrawCount,'a stable still does not keep redrawing');
+  for(const [quality,steps] of [['0.75',64],['1.75',160],['1.25',112]]){
+   detail.value=quality;emit(detail,'change');advance(16);assert.equal(frames.at(-1).steps,steps,'all detail levels use the reduced traversal budgets');
+  }
+  emit(next,'click');advance(transitionDuration/2);assert.equal(canvas.width,1000);
+  emit(play,'click');advance(16);
+  assert.equal(canvas.width,1600);assert.equal(canvas.height,1000,'pausing mid-transition immediately restores full still quality');
+  emit(play,'click');advance(transitionDuration/2+160);visible(2);
+  assert.equal(canvas.width,1600);assert.equal(canvas.height,1000,'resuming also finishes at full quality');
  }else{
   assert.equal(warnings.length,0);assert.ok(draws.length>0);visible(0);
   if(scenario==='paused'){emit(play,'click');advance(16);assert.equal(play.textContent,'Resume background');}
   else assert.equal(play.textContent,'Resume background');
   const frozen=draws.at(-1),drawCount=draws.length;
-  emit(next,'click');advance(1600);visible(1);
+  emit(next,'click');advance(transitionDuration+160);visible(1);
   assert.equal(draws.length,drawCount,'changing a reading stop does not move a paused/reduced-motion background');
   assert.deepEqual(draws.at(-1),frozen);
   if(scenario==='paused')emit(play,'click');

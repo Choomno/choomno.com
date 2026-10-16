@@ -1,5 +1,5 @@
 import {dot} from './intrinsic.js';
-import {readingPhase,readingPose} from './camera-path.js';
+import {readingPhase,readingPose,textPlaneDepth} from './camera-path.js';
 export {readingPhase,readingPose} from './camera-path.js';
 
 export const fieldScale = .82;
@@ -7,9 +7,9 @@ export const fieldScale = .82;
 // Fade the whole transparent plane before any corner reaches the near clip.
 // The quintic joins constant opacity with zero first and second derivatives.
 export function nearPlaneOpacity(minimumDepth) {
- if (minimumDepth <= .2) return 0;
- if (minimumDepth >= .7) return 1;
- const t = (minimumDepth - .2) / .5;
+ if (minimumDepth <= textPlaneDepth * .25) return 0;
+ if (minimumDepth >= textPlaneDepth * .875) return 1;
+ const t = (minimumDepth / textPlaneDepth - .25) / .625;
  return Math.max(0, Math.min(1, t * t * t * (10 - 15 * t + 6 * t * t)));
 }
 
@@ -19,7 +19,7 @@ export function nearPlaneOpacity(minimumDepth) {
 export function projectReadingPlaneWithDepth(phase, stationPhase, width, height, viewportWidth, viewportHeight) {
  if (!(width > 0 && height > 0 && viewportWidth > 0 && viewportHeight > 0)) return null;
  const camera = readingPose(phase), station = readingPose(stationPhase);
- const z = .8, half = z * fieldScale * width / viewportHeight, vertical = half * height / width;
+ const z = textPlaneDepth, half = z * fieldScale * width / viewportHeight, vertical = half * height / width;
  const time = Math.sqrt(1 + half * half + vertical * vertical + z * z);
  const apply = (m, v) => m.map(row => row.reduce((sum, x, i) => sum + x * v[i], 0));
  const spatial = v => [1, 2, 3].map(col => dot(camera.map(row => row[col]), apply(station, v)));
@@ -30,7 +30,7 @@ export function projectReadingPlaneWithDepth(phase, stationPhase, width, height,
   origin.map((v, i) => v + dx[i] * x + dy[i] * y));
  const minimumDepth = Math.min(...corners.map(p => p[2]));
  const nearOpacity = nearPlaneOpacity(minimumDepth);
- if (minimumDepth <= .02) return {matrix: null, minimumDepth, nearOpacity};
+ if (minimumDepth <= textPlaneDepth * .025) return {matrix: null, minimumDepth, nearOpacity};
  const focal = viewportHeight / (2 * fieldScale), denominator = origin[2];
  const horizontal = p => (viewportWidth / 2 * p[2] + focal * p[0]) / denominator;
  const downward = p => (viewportHeight / 2 * p[2] - focal * p[1]) / denominator;

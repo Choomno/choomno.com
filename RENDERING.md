@@ -126,45 +126,50 @@ and beam thickness are presentation choices.
 
 ## Camera and section transitions
 
-The camera follows a planar route around the center of one fixed, unfolded
-cell. It always looks inward toward that original center, including while
-its representative crosses into neighboring cells. The four reading stops
-have logical phases 0, π/4, π/2, and 3π/4. Their positions are chosen from
-the cell geometry:
+The camera moves around the center of one fixed, unfolded cell and always
+looks toward that center, including while its representative crosses into
+neighboring cells. The four logical reading phases are 0, π/4, π/2, and
+3π/4. Their positions and orientations come from the cell geometry:
 
 - The opening stop is at hyperbolic radius 2.54 in direction
   (1, 0, φ)/√(φ + 2), perpendicular to a pentagonal face.
-- Background is at radius 3.4 in the direction of ideal vertex 7,
-  (1, 1, 1)/√3.
-- Currently is at radius 3.2 in the direction of ideal vertex 19,
-  (1/φ, φ, 0)/√3.
-- Elsewhere is antipodal to the opening stop, at radius 2.54.
+- Background is at radius 3.4 toward ideal vertex 7, (1, 1, 1)/√3.
+  That ideal point lies exactly behind the camera, at Busemann height 3.4
+  relative to the horosphere through the cell center.
+- Currently is at radius 1.35 in the direction (1, φ, 1/φ)/2, toward the
+  midpoint of edge (7, 19). Its horizontal twofold orientation provides
+  a distinct, broadly hexagonal composition.
+- Elsewhere is antipodal to the opening stop, at radius 2.54, with its
+  pentagon pointing downward rather than upward.
 
-At both middle stops, the selected ideal vertex lies exactly behind the
-camera. Its Busemann height relative to the horosphere through the original
-cell center equals the corresponding reading radius. The opening and final
-frames orient their pentagons upright; the middle frames make their
-triangular configurations readable.
+Each leg starts with a geodesic sidestep of length 0.012 toward screen-right.
+A quartic Bézier bridge in Klein coordinates then turns inward and reaches
+the next station from its left. The final 0.012 is another geodesic sidestep.
+The bridge control points share the sidesteps' tangent lines. These small
+lateral movements clear the nearby stationary text before the larger
+movement through the cell. They produce strong text parallax with little
+movement of the surrounding edges.
 
-`camera-path.js` joins the anchors with three quadratic Bézier arcs in
-Klein coordinates. Each control point has Euclidean norm 0.88 and lies in
-the direction of the sum of its adjacent anchors. The route therefore
-retreats toward the center between the deeper cusp views, passing inside
-the connecting edge. Its planarity and sampled clearance from the edge
-tubes are checked numerically. Across 18,001 sampled poses, the minimum
-edge-axis distance is approximately 0.08128, versus the tube radius 0.025.
+The bridge is sampled at 8192 intervals, clustered near its endpoints, and
+reparameterized by hyperbolic arclength. Equal phase increments move the eye
+approximately equal distances within a leg. The up vectors at both reading
+stops are transported to the current radial direction and blended by a
+quintic roll interpolation. Position and camera-frame derivatives join
+continuously. Reverse navigation retraces the same route; text enters from
+the right and exits to the left.
 
-Each leg is reparameterized using a hyperbolic arclength table sampled at
-8192 intervals. Equal phase increments then move the eye approximately
-equal hyperbolic distances along that leg. Roll angles of 18°, 30°, −30°,
-and 18° at the four stops are interpolated along the legs. Reverse
-navigation retraces the same route. Text enters from the right and exits
-to the left.
+Independent numerical tests check Lorentz frames, tangent continuity,
+arclength, and clearance. Across 24,001 camera samples, the nearest edge-axis
+distance is approximately 0.0751, versus the tube radius 0.025. A separate
+intersection test locates crossings of the infinite text planes and checks
+that each is outside the finite reading rectangle, using five desktop and
+mobile footprints. Neither opacity nor clipping is used to establish that
+clearance.
 
 Each wheel gesture, swipe, tap, or navigation control selects one section.
-A transition between adjacent section centers takes 1.45 seconds and uses
+A transition between adjacent section centers takes 4.8 seconds and uses
 quintic smootherstep. Jumps across several sections ease through each leg
-separately, taking 1.45 seconds per leg and reaching zero velocity and
+separately, taking 4.8 seconds per leg and reaching zero velocity and
 acceleration at each intervening reading stop. A monotone cubic
 interpolation maps the scroll coordinate to camera phase; background and
 text use the same phase without additional lag. The camera rests between
@@ -181,14 +186,18 @@ Each reading block is anchored to a plane at its corresponding camera stop.
 `projection.js` constructs the plane in homogeneous Klein coordinates and
 projects it using the inverse Lorentz camera frame and the renderer's field
 of view. Its projective interpolation lies in a totally geodesic plane.
-At the matching reading pose the projection recovers the centered HTML text
-rectangle; viewport and font changes recalibrate that rectangle.
+In its station frame the plane has spatial depth 0.005, with its width and
+height scaled proportionally. At the matching reading pose it recovers the
+same centered HTML rectangle. Its small intrinsic size and proximity make
+the ambient geometry appear much larger by comparison during a sidestep.
+Viewport and font changes recalibrate the rectangle.
 
 The plane is transparent except for its HTML text. It is drawn as a CSS
 projective overlay, with opacity reduced as its reading pose leaves view.
 A separate quintic fade hides the whole plane smoothly before its nearest
-corner reaches the camera's near clip, avoiding abrupt disappearance when
-the camera crosses a stationary text plane. These are selected lifts in the
+corner reaches the camera's near clip, avoiding abrupt disappearance as
+the camera passes beside a stationary text rectangle. The fade and clip
+thresholds scale with the plane depth. These are selected lifts in the
 universal cover: the page does not generate deck-translated copies of the
 text or depth-test it against scaffold beams.
 The text is therefore a presentation layer, not additional quotient-invariant
@@ -199,8 +208,8 @@ not fit the viewport, and a graphics failure does not remove the content.
 
 The algebraic certificate specifies exact geometry and face pairings.
 JavaScript camera arithmetic uses doubles, while the GPU uses float32.
-Pixel resolution, a face crossing limit of 96 / 160 / 240, and a traveled
-distance cutoff of 32 bound rendering work. A local face-intersection
+Pixel resolution, a face crossing limit of 64 / 112 / 160, and a traveled
+distance cutoff of 20 bound rendering work. A local face-intersection
 parameter tanh(s) ≥ 0.999999 also terminates tracing to avoid unstable
 near-ideal arithmetic. Grazing intersections and very distant structure
 remain subject to floating point rounding. The image is not
@@ -284,4 +293,6 @@ Its regression checks remain available:
 The animation is a fixed full-page background with muted neutral beams.
 Background controls are collapsible, reduced-motion preferences are
 respected, and render resolution is capped at 1600 by 1000 to bound
-full-screen GPU work.
+full-screen GPU work. During motion the pixel ratio is capped at 0.8 and
+the buffer at 1000 by 700. Full still quality returns automatically after
+120 milliseconds without camera movement; idle frames are not redrawn.
