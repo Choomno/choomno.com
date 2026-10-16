@@ -12,11 +12,12 @@ export function advance(frame,tet,step,data,ideal){
  }
  throw Error('Camera traversal exceeded 64 faces');
 }
-// Turn at the center of the fundamental cell, sweeping past its ideal vertices.
-// The initial direction bisects +x and +z, looking through a rhombic face.
-export function cellTurn(angle){
- const a=angle+Math.PI/4,c=Math.cos(a),s=Math.sin(a);
- return [[1,0,0,0],[0,c,0,s],[0,0,1,0],[0,-s,0,c]];
+// Circle about the finite cell center, with the camera aimed inward.
+// Spatial rotation times a radial boost times a half-turn of the camera.
+export function cellTurn(angle,radius=.55){
+ const c=Math.cos(angle+Math.PI/4),s=Math.sin(angle+Math.PI/4);
+ const ch=Math.cosh(radius),sh=Math.sinh(radius);
+ return [[ch,0,0,-sh],[sh*s,-c,0,-ch*s],[0,0,1,0],[sh*c,s,0,-ch*c]];
 }
 export function beamData(data){
  const classes=[...new Set(data.vertexClasses.filter((_,i)=>data.ideal[i]))].sort();

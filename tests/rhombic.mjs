@@ -56,17 +56,20 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
 }
 console.log(`Rhombic checks passed: ${crossings} camera crossings; ${intersectionChecks} independent tube intersections; negative ray extensions excluded.`);
 
-// The reference sequence turns at a fixed eye; ideal points sweep past it.
-const U=[1,0,0,1],eye0=[1,0,0,0];
-let front=0,behind=0;
+// Circular camera orbit about the finite cell center, always aimed inward.
+const origin=[1,0,0,0],rho=.55;
 for(let i=0;i<=720;i++){
- const f=cellTurn(i*Math.PI/360),p=f.map(r=>r[0]);
- p.forEach((v,j)=>close(v,eye0[j],1e-12));
+ const f=cellTurn(i*Math.PI/360,rho),p=f.map(r=>r[0]),forward=f.map(r=>r[3]);
+ close(-dot(p,origin),Math.cosh(rho),1e-12);
+ close(p[1]*p[1]+p[3]*p[3],Math.sinh(rho)**2,1e-12);
+ close(p[2],0,1e-12);
+ const centerOnRay=point(p,forward,rho);
+ centerOnRay.forEach((v,j)=>close(v,origin[j],1e-12));
  for(let j=0;j<4;j++)for(let k=0;k<4;k++)close(dot(f.map(r=>r[j]),f.map(r=>r[k])),j===k?(j===0?-1:1):0,1e-12);
- const z=dot(f.map(r=>r[3]),U);front+=+(z>.9);behind+=+(z<-.9);
- close(f[2][2],1,1e-12); // no roll: vertical direction stays fixed
+ close(f[2][2],1,1e-12);
+ for(const n of data.planes)assert.ok(dot(p,n)<0);
 }
-assert.ok(front>20&&behind>20);
 const start=cellTurn(0),end=cellTurn(2*Math.PI);
 start.flat().forEach((v,i)=>close(v,end.flat()[i],1e-12));
-console.log('Reference turn passed: fixed eye, complete revolution, no roll, ideal vertices pass in front of and behind the viewing direction.');
+assert.ok(Math.hypot(...start.map((r,i)=>r[0]-cellTurn(Math.PI)[i][0]))>1);
+console.log('Cell-center orbit passed: constant hyperbolic radius, moving eye, inward look direction, closed circle, no roll.');

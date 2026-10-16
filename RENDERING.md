@@ -44,13 +44,12 @@ For a face normal n, its intersection parameter is
     tanh(s) = −⟨p,n⟩ / ⟨v,n⟩.
 
 Both point and tangent are transformed by the exact face pairing and tracing
-continues in the paired cell. Camera motion uses these same identifications. Automatic motion fixes the observer at the center of the fundamental domain
-and turns the viewing direction in the xz-plane. The initial direction bisects
-+x and +z, looking through a rhombic face. During a full turn the ideal vertices
-sweep across the image and pass outside the field of view, as in the reference
-sequence around 13:49–14:09. The camera does not roll or orbit on a horosphere.
-Manual navigation pauses automatic turning; Resume turn restores the reference
-viewing sequence.
+continues in the paired cell. Camera motion uses these same identifications. Automatic motion places the camera on a circular orbit about the finite center
+of a fundamental cell, at hyperbolic distance 0.55 from that center. The camera
+looks inward toward the center throughout the orbit and its vertical axis
+stays fixed. Each pose is a spatial rotation of a radial Lorentz boost followed
+by a half-turn of the camera. Manual navigation pauses the orbit; Resume orbit
+restores it.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
 ⟨a,u⟩=−1, and set t=u−a. A tube of hyperbolic radius r around that geodesic ray

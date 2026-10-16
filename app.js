@@ -22,7 +22,7 @@ async function main(){
  const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,9,24,0,gl.RGBA,gl.FLOAT,texels);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  const uniform=name=>gl.getUniformLocation(program,name),uCamera=uniform('camera'),uColors=uniform('cuspColors'),uRes=uniform('resolution'),uSteps=uniform('maxSteps');gl.uniform1i(uniform('manifold'),0);
  const play=document.querySelector('#play'),speed=document.querySelector('#travel'),detail=document.querySelector('#detail');const reduced=matchMedia('(prefers-reduced-motion: reduce)');let running=!reduced.matches,phase=0,frame=cellTurn(0),tet=0,ideal=[1,0,0,1],drag=null,dirty=true,last=0,visible=true;const keys=new Set();
- function state(){play.textContent=running?'Pause view':'Resume turn';play.setAttribute('aria-pressed',String(running));}state();
+ function state(){play.textContent=running?'Pause orbit':'Resume orbit';play.setAttribute('aria-pressed',String(running));}state();
  function move(step){running=false;state();({frame,tet,ideal}=advance(frame,tet,step,data,ideal));dirty=true;}
  function draw(time){requestAnimationFrame(draw);const dt=Math.min((time-last)/1000,.04);last=time;if(document.hidden||!visible)return;
  if(running&&!drag){phase=(phase+dt*Number(speed.value))%(2*Math.PI);frame=cellTurn(phase);tet=0;ideal=[1,0,0,1];dirty=true;}
