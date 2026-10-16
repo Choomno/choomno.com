@@ -1,19 +1,18 @@
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {transitionDuration} from '../section-navigation.js';
-import {textSlideDuration} from '../transition-timing.js';
+import {transitionDuration,textSlideDuration,transitionProgress} from '../transition-timing.js';
+import {projectReadingPlaneWithDepth,readingPhase} from '../projection.js';
 
 const scenario=process.argv[2];
 if(!scenario){
- for(const name of ['no-webgl','data-failure','paused','reduced-motion','motion-quality','rounded-scroll']){
+ for(const name of ['media-clock','autoplay-rejection','media-failure','paused','reduced-motion','rounded-scroll','short-viewport','rewind-cancel']){
   const result=spawnSync(process.execPath,['--experimental-default-type=module',fileURLToPath(import.meta.url),name],{encoding:'utf8'});
   assert.equal(result.status,0,`${name}: ${result.stdout}${result.stderr}`);
  }
- console.log('Scene integration: graphics failures preserve text/navigation; paused and reduced-motion scenes navigate independently; short viewports use readable document flow; motion resolution automatically restores full-quality stills; rounded scrolling and delayed browser events preserve continuous text/camera motion.');
+ console.log('Scene integration: decoded media frames drive text; stalls, rounded scrolling and visibility retain the same pose; playback failures preserve navigation; pause/reduced motion, rewind, cancellation and short-viewport flow pass.');
 }else{
- let now=0,rafId=0,rafs=new Map(),draws=[],frames=[],stepBudget=0;
+ let now=0,nextId=0,rafs=new Map(),timers=new Map();
  class Target {
   constructor(kind=''){this.kind=kind;this.listeners=new Map();this.attributes={};this.children=[];this.style={};}
   addEventListener(type,fn){if(!this.listeners.has(type))this.listeners.set(type,new Set());this.listeners.get(type).add(fn);}
@@ -23,34 +22,52 @@ if(!scenario){
   getAttribute(key){return this.attributes[key]??null;}
   append(...children){this.children.push(...children);}
   remove(){}
+  focus(options){document.activeElement=this;this.focusOptions=options;document.dispatchEvent({type:'focusin',target:this});}
   closest(selector){
    if(selector==='main > section')return this.section||null;
    return selector.split(',').some(part=>part===this.kind||part==='a[href]'&&this.kind==='a')?this:null;
   }
  }
- class Classes{
+ class Classes {
   values=new Set();add(value){this.values.add(value);}
   contains(value){return this.values.has(value);}
   toggle(value,enabled){if(enabled)this.values.add(value);else this.values.delete(value);}
  }
+ class Video extends Target {
+  constructor(){super('video');this.frames=new Map();this.sources=[];this.currentTime=0;this.readyState=4;this.paused=true;this.hidden=true;this.playCalls=0;}
+  canPlayType(type){return type.startsWith('video/mp4')?'probably':'';}
+  load(){this.sources.push(this.src);this.currentTime=0;}
+  play(){++this.playCalls;this.paused=false;return scenario==='autoplay-rejection'?Promise.reject(new Error('Autoplay blocked')):Promise.resolve();}
+  pause(){this.paused=true;}
+  requestVideoFrameCallback(fn){const id=++nextId;this.frames.set(id,fn);return id;}
+  cancelVideoFrameCallback(id){this.frames.delete(id);}
+  present(seconds){
+   assert.equal(this.paused,false,'a paused player must not consume another decoded frame');
+   const [id,fn]=this.frames.entries().next().value??[];assert.ok(fn,'a frame callback must be pending');
+   this.frames.delete(id);this.currentTime=seconds;fn(now,{mediaTime:seconds});
+  }
+ }
  const win=new Target(),doc=new Target(),media=new Target();media.matches=scenario==='reduced-motion';
- globalThis.window=win;globalThis.document=doc;globalThis.innerHeight=800;globalThis.innerWidth=1280;globalThis.scrollY=0;
+ globalThis.window=win;globalThis.document=doc;globalThis.innerHeight=scenario==='short-viewport'?390:800;globalThis.innerWidth=1280;globalThis.scrollY=0;
+ Object.defineProperty(globalThis,'navigator',{value:{connection:{saveData:false}},configurable:true});
  globalThis.performance={now:()=>now};globalThis.matchMedia=()=>media;globalThis.getSelection=()=>({toString:()=>''});
- globalThis.requestAnimationFrame=fn=>{rafs.set(++rafId,fn);return rafId;};globalThis.cancelAnimationFrame=id=>rafs.delete(id);
+ globalThis.requestAnimationFrame=fn=>{rafs.set(++nextId,fn);return nextId;};globalThis.cancelAnimationFrame=id=>rafs.delete(id);
+ globalThis.setTimeout=(fn,ms)=>{timers.set(++nextId,{fn,at:now+ms});return nextId;};globalThis.clearTimeout=id=>timers.delete(id);
  globalThis.CustomEvent=class{constructor(type,{detail}){this.type=type;this.detail=detail;}};
  globalThis.ResizeObserver=class{constructor(callback){this.callback=callback;}observe(){}disconnect(){}};
  globalThis.getComputedStyle=node=>({width:String(node.copyWidth),height:String(node.offsetHeight)});
- const location=new URL('http://localhost/'+(scenario==='data-failure'?'#background':''));globalThis.location=location;
+ const location=new URL('http://localhost/');globalThis.location=location;
  globalThis.history={state:null,scrollRestoration:'auto',replaceState(_,unused,url){location.href=new URL(url,location).href;},pushState(_,unused,url){location.href=new URL(url,location).href;}};
  function emit(target,type,props={}){
   const event={type,target:doc.body,defaultPrevented:false,cancelable:true,preventDefault(){this.defaultPrevented=true;},...props};
   target.dispatchEvent(event);return event;
  }
  win.scrollTo=(_,y)=>{globalThis.scrollY=scenario==='rounded-scroll'?Math.round(y):y;emit(win,'scroll');};
- doc.body=new Target('body');doc.documentElement={scrollHeight:3250,classList:new Classes()};doc.createElement=kind=>new Target(kind);doc.fonts={ready:Promise.resolve()};
+ doc.body=new Target('body');doc.documentElement={scrollHeight:3250,classList:new Classes()};doc.createElement=kind=>new Target(kind);doc.fonts={ready:Promise.resolve()};doc.hidden=false;
  const geometry=[[84,760],[848.5,801.5],[1650,800.25],[2450,800]];
  const sections=geometry.map((_,index)=>{
   const section=new Target('section');section.id=['','background','','elsewhere'][index];section.attributes['aria-labelledby']=['name','background-title','current-title','elsewhere-title'][index];section.section=section;
+  Object.defineProperty(section,'offsetHeight',{get:()=>geometry[index][1]});
   section.getBoundingClientRect=()=>({top:geometry[index][0]-scrollY,height:geometry[index][1]});return section;
  });
  const copies=sections.map((section,index)=>{const copy=new Target('div');copy.section=section;copy.copyWidth=index===0?620:440;copy.offsetHeight=[302,306,286,180][index];return copy;});
@@ -58,116 +75,133 @@ if(!scenario){
   const heading=new Target('h2');heading.section=section;
   return [[section.attributes['aria-labelledby'],heading],...(section.id?[[section.id,section]]:[])];
  }));
- const canvas=new Target('canvas'),play=new Target('button'),detail=new Target('select');detail.value='1.25';
- canvas.getBoundingClientRect=()=>({width:innerWidth,height:innerHeight});
- const gl=new Proxy({
-  createShader:()=>({}),createProgram:()=>({}),createTexture:()=>({}),getShaderParameter:()=>true,getProgramParameter:()=>true,getUniformLocation:(_,name)=>name,
-  uniformMatrix4fv:(name,transpose,values)=>{if(name==='camera')draws.push([...values]);},
-  uniform1i:(name,value)=>{if(name==='maxSteps')stepBudget=value;},
-  drawArrays:()=>frames.push({width:canvas.width,height:canvas.height,steps:stepBudget,time:now,camera:draws.at(-1)}),
- },{get(target,key){return key in target?target[key]:String(key).toUpperCase()===key?1:()=>{};}});
- canvas.getContext=()=>scenario==='no-webgl'?null:gl;
- const manifold=JSON.parse(await readFile(new URL('../dodecahedral-data.json',import.meta.url),'utf8'));
- globalThis.fetch=async()=>({ok:scenario!=='data-failure',json:async()=>manifold});
- const nodes={'#space':canvas,'#play':play,'#detail':detail,'#background':sections[1],'.current':sections[2],'.elsewhere':sections[3]};
+ const video=new Video(),still=new Target('img'),play=new Target('button'),year=new Target('span');
+ const nodes={'#background-video':video,'#background-still':still,'#play':play,'#copyright-year':year};
  doc.querySelector=selector=>nodes[selector];doc.querySelectorAll=selector=>selector==='main > section'?sections:copies;doc.getElementById=id=>ids[id];
- const warnings=[],errors=[];console.warn=(...args)=>warnings.push(args.join(' '));console.error=(...args)=>errors.push(args.join(' '));
- function advance(ms){const end=now+ms;while(now<end){now=Math.min(end,now+16);const queue=[...rafs.values()];rafs.clear();for(const fn of queue)fn(now);}}
+ const errors=[];console.error=(...args)=>errors.push(args.join(' '));
+ function advance(ms){
+  const end=now+ms;
+  while(now<end){
+   now=Math.min(end,now+16);
+   for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.fn();}
+   const queue=[...rafs.values()];rafs.clear();for(const fn of queue)fn(now);
+  }
+ }
+ async function flush(){for(let i=0;i<12;i++)await Promise.resolve();}
  function visible(index){
   assert.equal(copies[index].style.visibility,'visible');assert.equal(copies[index].style.opacity,'1');assert.equal(copies[index].inert,false);
-  assert.match(copies[index].style.transform,/^matrix3d\(/);
-  copies.forEach((copy,i)=>{if(i!==index)assert.equal(copy.inert,true);});
+  assert.equal(copies[index].style.transform,`translate(${(innerWidth-copies[index].copyWidth)/2}px, ${(innerHeight-copies[index].offsetHeight)/2}px)`,'a reading station uses an exact centered 2D translation');
+  copies.forEach((copy,i)=>{
+   assert.equal(copy.style.willChange,'auto','stationary and hidden text releases its compositor hint');
+   if(i!==index){assert.equal(copy.inert,true);assert.equal(copy.style.transform,'','hidden planes do not retain a perspective raster');}
+  });
  }
- await import('../app.js');
- for(let i=0;i<12;i++)await Promise.resolve();
- advance(32);
+ function expectedTransform(index,progress){
+  const matrix=projectReadingPlaneWithDepth(readingPhase(progress),readingPhase(index),copies[index].copyWidth,copies[index].offsetHeight,innerWidth,innerHeight).matrix;
+  return `matrix3d(${matrix.join(',')})`;
+ }
+ function endLeg(){const ended=video.onended;assert.ok(ended);ended();}
+ await import('../app.js');await flush();advance(32);
  assert.deepEqual(errors,[],'application initialization should not throw');
- assert.equal(doc.documentElement.classList.contains('projected-text'),true);
- const controls=doc.body.children.find(node=>node.className==='section-controls');assert.ok(controls,'navigation is initialized before graphics can fail');
- const next=controls.children[2];
- if(scenario==='no-webgl'||scenario==='data-failure'){
-  assert.equal(play.disabled,true);assert.equal(detail.disabled,true);
-  assert.equal(warnings.length,1);assert.match(warnings[0],scenario==='no-webgl'?/WebGL 2 unavailable/:/Manifold data could not be loaded/);
-  const initial=scenario==='data-failure'?1:0;visible(initial);
-  emit(next,'click');advance(transitionDuration+160);visible(initial+1);
-  assert.equal(draws.length,0,'graphics failure does not prevent selecting the next text plane');
- }else if(scenario==='rounded-scroll'){
-  assert.equal(warnings.length,0);visible(0);
-  const initialTransform=copies[0].style.transform,transforms=[];
-  const departureSampleTime=Math.floor(textSlideDuration/3/16)*16;
-  const initialDrawCount=draws.length;
-  emit(next,'click');
-  for(let elapsed=16;elapsed<=departureSampleTime;elapsed+=16){
-   advance(16);
-   assert.equal(scrollY,0,'the first portion of the sidestep fits inside one native scroll pixel');
-   assert.equal(copies[0].style.visibility,'visible');
-   transforms.push(copies[0].style.transform);
-  }
-  assert.ok(new Set(transforms).size>=20,'text must move continuously while rounded native scrolling remains stationary');
-  assert.ok(new Set(draws.slice(initialDrawCount).map(matrix=>matrix.join(','))).size>=10,'the camera must also advance without a native scroll pixel changing');
-  const centerX=transform=>{
-   const matrix=transform.slice(9,-1).split(',').map(Number),x=copies[0].copyWidth/2,y=copies[0].offsetHeight/2;
-   return (matrix[0]*x+matrix[4]*y+matrix[12])/(matrix[3]*x+matrix[7]*y+1);
-  };
-  assert.ok(centerX(initialTransform)-centerX(transforms.at(-1))>20,'the text displacement must be meaningful, not merely numerical noise');
-  // Flush queued rendering at a fixed timestamp so there is no new navigation
-  // progress to obscure whether a delayed browser event changes the pose.
-  const flushSameTime=()=>{const queue=[...rafs.values()];rafs.clear();for(const fn of queue)fn(now);};
-  flushSameTime();
-  const continuousTransform=copies[0].style.transform,continuousCamera=draws.at(-1);
-  assert.notEqual(continuousTransform,initialTransform);
-  emit(win,'scroll');flushSameTime();
-  assert.equal(copies[0].style.transform,continuousTransform,'a late rounded scroll event must not reset the continuous text pose');
-  assert.deepEqual(draws.at(-1),continuousCamera,'a late scroll event must not replace the camera pose with an integer-scroll approximation');
-  doc.hidden=true;emit(doc,'visibilitychange');flushSameTime();
-  doc.hidden=false;emit(doc,'visibilitychange');flushSameTime();
-  assert.equal(copies[0].style.transform,continuousTransform,'visibility changes must retain the current logical text position');
-  assert.deepEqual(draws.at(-1),continuousCamera,'visibility changes must retain the unrounded camera pose');
-  advance(transitionDuration-departureSampleTime+160);visible(1);
-  assert.equal(scrollY,849,'the reading stop remains exact even when its native scroll position is rounded');
- }else if(scenario==='motion-quality'){
-  assert.equal(warnings.length,0);visible(0);
-  assert.equal(frames.at(-1).width,1600);assert.equal(frames.at(-1).height,1000);assert.equal(frames.at(-1).steps,112);
-  emit(next,'click');advance(transitionDuration/2);
-  assert.equal(next.disabled,true,'the transition remains in progress at its halfway point');
-  assert.equal(frames.at(-1).width,1000);assert.equal(frames.at(-1).height,625);
-  assert.ok(canvas.width/innerWidth<=.8&&canvas.height<=700,'moving resolution obeys both pixel-ratio and dimension caps');
-  assert.equal(frames.at(-1).steps,112);
-  advance(transitionDuration/2+160);visible(1);
-  const lastMoving=frames.findLastIndex(frame=>frame.width===1000);
-  const restored=frames[lastMoving+1];
-  assert.ok(lastMoving>=0&&restored,'motion must be followed by an automatic full-quality redraw');
-  assert.equal(restored.width,1600);assert.equal(restored.height,1000);
-  assert.ok(restored.time-frames[lastMoving].time>=120,'restoration waits for at least 120ms of camera stability');
-  assert.ok(restored.time-frames[lastMoving].time<=136,'restoration occurs on the first eligible animation frame');
-  assert.deepEqual(restored.camera,frames[lastMoving].camera,'the quality redraw preserves the settled camera pose');
-  const stableDrawCount=frames.length;advance(500);assert.equal(frames.length,stableDrawCount,'a stable still does not keep redrawing');
-  for(const [quality,steps] of [['0.75',64],['1.75',160],['1.25',112]]){
-   detail.value=quality;emit(detail,'change');advance(16);assert.equal(frames.at(-1).steps,steps,'all detail levels use the reduced traversal budgets');
-  }
-  emit(next,'click');advance(transitionDuration/2);assert.equal(canvas.width,1000);
-  emit(play,'click');advance(16);
-  assert.equal(canvas.width,1600);assert.equal(canvas.height,1000,'pausing mid-transition immediately restores full still quality');
-  emit(play,'click');advance(transitionDuration/2+160);visible(2);
-  assert.equal(canvas.width,1600);assert.equal(canvas.height,1000,'resuming also finishes at full quality');
+ assert.equal(year.textContent,String(new Date().getFullYear()));
+ const controls=doc.body.children.find(node=>node.className==='section-controls');assert.ok(controls,'navigation initializes independently of media playback');
+ const previous=controls.children[0],next=controls.children[2];
+ if(scenario==='short-viewport'){
+  assert.equal(doc.documentElement.classList.contains('projected-text'),false);assert.equal(controls.hidden,true);
+  copies.forEach(copy=>{assert.equal(copy.style.transform,'');assert.equal(copy.inert,false);});
+  assert.equal(emit(win,'wheel',{deltaX:0,deltaY:80}).defaultPrevented,false);
+  win.scrollTo(0,1650);assert.equal(still.src,'./media/station-2.webp','ordinary scrolling selects the nearest station poster');
+  assert.equal(video.playCalls,0,'document flow never begins an animated transition');
  }else{
-  assert.equal(warnings.length,0);assert.ok(draws.length>0);visible(0);
-  if(scenario==='paused'){emit(play,'click');advance(16);assert.equal(play.textContent,'Resume background');}
-  else assert.equal(play.textContent,'Resume background');
-  const frozen=draws.at(-1),drawCount=draws.length;
-  emit(next,'click');advance(transitionDuration+160);visible(1);
-  assert.equal(draws.length,drawCount,'changing a reading stop does not move a paused/reduced-motion background');
-  assert.deepEqual(draws.at(-1),frozen);
-  if(scenario==='paused')emit(play,'click');
-  else{media.matches=false;emit(media,'change');}
-  advance(32);visible(1);assert.notDeepEqual(draws.at(-1),frozen,'resuming moves the camera to the selected stop');
+  assert.equal(doc.documentElement.classList.contains('projected-text'),true);visible(0);
+  assert.equal(still.src,'./media/station-0.webp');
+  if(scenario==='media-clock'){
+   const initial=copies[0].style.transform;emit(next,'click');
+   assert.match(video.src,/transition-0-forward\.mp4$/);assert.equal(video.hidden,true,'a station poster remains until the first presented frame');
+   advance(1000);assert.equal(copies[0].style.transform,initial,'elapsed wall time cannot move text before decoded frames');
+   video.present(.4);assert.equal(video.hidden,false);
+   assert.equal(copies[0].style.transform,expectedTransform(0,transitionProgress(400,0)),'text uses the exact presented media timestamp');
+   assert.match(copies[0].style.transform,/^matrix3d\(/,'moving text retains the full projective plane');
+   assert.equal(copies[0].style.willChange,'transform, opacity');
+   copies.filter(copy=>copy.style.visibility==='hidden').forEach(copy=>assert.equal(copy.style.willChange,'auto'));
+   const frameTransform=copies[0].style.transform;advance(2000);assert.equal(copies[0].style.transform,frameTransform,'a stalled video freezes the text at the same pose');
+   video.present(7.95);endLeg();visible(1);assert.equal(still.src,'./media/station-1.webp');assert.equal(video.hidden,true);
+   emit(previous,'click');assert.match(video.src,/transition-0-reverse\.mp4$/);
+   video.present(.4);assert.equal(copies[1].style.transform,expectedTransform(1,1-transitionProgress(400,0)),'reverse playback drives the reverse camera route');
+   endLeg();visible(0);
+   emit(win,'keydown',{key:'End'});
+   for(let leg=0;leg<3;leg++){
+    assert.match(video.src,new RegExp(`transition-${leg}-forward\\.mp4$`));
+    video.present(.4);endLeg();visible(leg+1);
+    assert.equal(next.disabled,true,'multi-leg navigation stays locked through its intermediate stations');
+   }
+   assert.equal(previous.disabled,false,'the final exact station releases the transition lock');
+  }else if(scenario==='autoplay-rejection'){
+   emit(next,'click');await flush();visible(1);
+   assert.equal(still.src,'./media/station-1.webp');assert.equal(video.hidden,true);assert.equal(video.paused,true);
+   assert.equal(next.disabled,false,'autoplay denial cannot strand navigation in a busy state');
+   emit(next,'click');await flush();visible(2);
+  }else if(scenario==='media-failure'){
+   emit(next,'click');video.onerror();assert.match(video.src,/transition-0-forward\.webm$/,'a decode error tries the alternate format');
+   video.onerror();visible(1);assert.equal(video.hidden,true);assert.equal(next.disabled,false);
+   assert.equal(still.src,'./media/station-1.webp','both codec failures retain the requested text and station still');
+   emit(next,'click');video.present(4);
+   assert.ok(copies.every(copy=>copy.style.opacity!=='1'),'the bridge is between its stationary reading poses');
+   video.onerror();visible(1);
+   assert.equal(still.src,'./media/station-1.webp','a codec retry restores both the source poster and its readable text while loading');
+   video.present(4);advance(12016);visible(2);
+   assert.equal(still.src,'./media/station-2.webp','a prolonged network/decoder stall also completes with a still');
+  }else if(scenario==='paused'||scenario==='reduced-motion'){
+   if(scenario==='paused')emit(play,'click');
+   assert.equal(play.textContent,'Resume background');
+   const frozenPoster=still.src;emit(next,'click');visible(1);
+   assert.equal(video.playCalls,0);assert.equal(still.src,frozenPoster,'paused or reduced-motion navigation retains its stationary background');
+   if(scenario==='paused')emit(play,'click');else{media.matches=false;emit(media,'change');}
+   assert.equal(still.src,'./media/station-1.webp','resuming aligns the background with the currently selected text');
+   emit(next,'click');video.present(4);emit(play,'click');visible(2);
+   const frozenFrame=copies[2].style.transform,playCount=video.playCalls;
+   advance(transitionDuration);assert.equal(video.playCalls,playCount);assert.equal(copies[2].style.transform,frozenFrame);
+   assert.equal(next.disabled,false,'pausing mid-transition releases navigation at its selected station');
+  }else if(scenario==='rounded-scroll'){
+   const initial=copies[0].style.transform,transforms=[];emit(next,'click');
+   const end=Math.floor(textSlideDuration/3/16)*16;
+   for(let time=16;time<=end;time+=16){
+    video.present(time/1000);assert.equal(scrollY,0,'departure starts within one native scroll pixel');
+    transforms.push(copies[0].style.transform);
+   }
+   assert.ok(new Set(transforms).size>=20,'decoded frames continuously move text despite quantized native scrolling');
+   const exact=transforms.at(-1);assert.notEqual(exact,initial);
+   advance(1000);emit(win,'scroll');assert.equal(copies[0].style.transform,exact,'wall time and delayed native scroll cannot replace media progress');
+   doc.hidden=true;emit(doc,'visibilitychange');assert.equal(video.paused,true);
+   advance(14000);assert.equal(copies[0].style.transform,exact,'hidden tabs suspend the stall watchdog and retain the same frame');
+   doc.hidden=false;emit(doc,'visibilitychange');assert.equal(video.paused,false);assert.equal(copies[0].style.transform,exact);
+   video.present(.6);assert.notEqual(copies[0].style.transform,exact);endLeg();visible(1);
+   assert.equal(scrollY,849,'the exact text stop survives a fractional anchor rounded by native scrolling');
+  }else if(scenario==='rewind-cancel'){
+   emit(next,'click');video.present(.4);
+   const lateFrame=[...video.frames.values()][0],lateEnded=video.onended;
+   emit(win,'resize');advance(32);visible(1);
+   assert.equal(video.paused,true);assert.equal(still.src,'./media/station-1.webp');
+   const settled=copies[1].style.transform;
+   lateFrame(now,{mediaTime:2});lateEnded();assert.equal(copies[1].style.transform,settled,'callbacks canceled by resize cannot revive an earlier transition');
+   const rewind=new Target('a');rewind.href='http://localhost/#name';rewind.attributes.href='#name';rewind.attributes['data-rewind']='';
+   const before=video.playCalls;emit(doc,'click',{target:rewind,button:0});advance(16);
+   visible(0);assert.equal(video.playCalls,before);assert.equal(still.src,'./media/station-0.webp');assert.equal(doc.activeElement,ids.name);
+   emit(next,'click');video.present(.4);
+   location.hash='#elsewhere';emit(win,'hashchange');visible(3);
+   assert.equal(still.src,'./media/station-3.webp');assert.equal(video.paused,true,'external hash navigation cancels media and settles its exact destination');
+  }
  }
- // The same initialized page must remain readable when a phone rotates to landscape.
+ // Rotation into a short viewport restores readable ordinary document flow.
  globalThis.innerHeight=390;emit(win,'resize');advance(32);
  assert.equal(doc.documentElement.classList.contains('projected-text'),false);assert.equal(controls.hidden,true);
- copies.forEach(copy=>{assert.equal(copy.style.transform,'');assert.equal(copy.style.visibility,'');assert.equal(copy.inert,false);});
+ copies.forEach(copy=>{assert.equal(copy.style.transform,'');assert.equal(copy.style.visibility,'');assert.equal(copy.style.willChange,'');assert.equal(copy.inert,false);});
  assert.equal(emit(win,'wheel',{deltaX:0,deltaY:80}).defaultPrevented,false,'short viewports retain ordinary scrolling');
  globalThis.innerHeight=800;emit(win,'resize');advance(32);
  assert.equal(doc.documentElement.classList.contains('projected-text'),true);assert.equal(controls.hidden,false);
+ globalThis.innerWidth=390;globalThis.innerHeight=844;
+ copies.forEach((copy,index)=>{copy.copyWidth=Math.min(index===0?620:360,innerWidth*.88);});
+ emit(win,'resize');advance(32);
+ const centered=copies.findIndex(copy=>copy.style.opacity==='1');assert.ok(centered>=0,'mobile resize retains a readable station');visible(centered);
  assert.deepEqual(errors,[]);
 }

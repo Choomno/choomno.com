@@ -31,7 +31,7 @@ export function beamData(data){
 export const fragment=`#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D manifold;
+uniform highp sampler2D manifold;
 uniform mat4 camera;
 uniform vec2 resolution;
 uniform int maxSteps;

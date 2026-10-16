@@ -135,4 +135,71 @@ enabled=false;nav.refresh();assert.equal(emit(win,'wheel',{deltaY:100,deltaX:0})
 assert.equal(doc.body.children[0].hidden,true);
 enabled=true;nav.refresh();media.matches=true;emit(media,'change');nav.goTo(3);assert.equal(scrollY,2450,'reduced-motion navigation is immediate');
 nav.destroy();assert.equal(history.scrollRestoration,'auto');
-console.log('Section navigation: precise poses, multi-leg stops, atomic gestures, momentum, hashes, touch cancellation, keyboard, resize and static/reduced-motion fallbacks passed.');
+
+// An external media clock owns progress completely, including multi-leg jumps.
+media.matches=false;location.hash='#name';globalThis.scrollY=0;
+const requests=[],reported=[];
+const mediaNav=initSectionNavigation({isEnabled:()=>enabled,onProgress:value=>reported.push(value),animateTransition(callbacks){
+ const request={...callbacks,cancellations:0};requests.push(request);
+ return ()=>{
+  ++request.cancellations;
+  // Even callbacks dispatched by the player's cancellation cannot revive it.
+  request.onProgress(.42);request.onComplete();
+ };
+}});
+const mediaControls=doc.body.children.at(-1);
+assert.equal(requests.length,0,'initial hash settlement does not start media playback');
+assert.equal(mediaNav.goTo(3),true);
+assert.deepEqual([requests[0].from,requests[0].to],[0,3]);
+assert.equal(mediaControls.children[0].disabled,true);assert.equal(mediaControls.children[2].disabled,true);
+requests[0].onProgress(.5);assert.equal(scrollY,880.75/2);assert.equal(mediaNav.progress,.5);
+advance(1000);assert.equal(mediaNav.progress,.5,'wall-clock animation cannot run ahead of a stalled video');
+assert.equal(mediaNav.goTo(1),false,'external playback retains the atomic gesture lock');
+requests[0].onProgress(1);assert.equal(scrollY,880.75,'media progress may reach an intermediate station');
+requests[0].onProgress(1.5);assert.equal(scrollY,(880.75+1650.125)/2,'logical progress interpolates between the appropriate section anchors');
+requests[0].onComplete();assert.equal(scrollY,2450);assert.equal(mediaNav.progress,3,'completion restores the exact target even without a final progress frame');
+assert.equal(mediaControls.children[0].disabled,false);assert.equal(mediaControls.children[2].disabled,true);
+const afterCompletion=reported.length;
+requests[0].onProgress(2.9);requests[0].onComplete();assert.equal(reported.length,afterCompletion,'duplicate and late frame callbacks after completion are ignored');
+
+mediaNav.goTo(0);assert.deepEqual([requests[1].from,requests[1].to],[3,0]);
+requests[1].onProgress(2.25);assert.equal(scrollY,1650.125+(2450-1650.125)*.25,'reverse clips use the same logical position convention');
+requests[1].onComplete();assert.equal(scrollY,0);
+mediaNav.goTo(2);requests[2].onProgress(.25);
+emit(win,'resize');advance(16);
+assert.equal(requests[2].cancellations,1,'resize cancels external playback');
+assert.equal(scrollY,1650.125);assert.equal(mediaNav.progress,2,'resize settles the selected destination');
+const afterResize=reported.length;
+requests[2].onProgress(1);requests[2].onComplete();assert.equal(reported.length,afterResize,'late canceled callbacks cannot overwrite a resize settlement');
+
+mediaNav.goTo(0);requests[3].onProgress(1.75);
+media.matches=true;emit(media,'change');
+assert.equal(requests[3].cancellations,1,'enabling reduced motion cancels external playback');
+assert.equal(scrollY,0);assert.equal(mediaNav.progress,0);
+const beforeReduced=requests.length;mediaNav.goTo(3);
+assert.equal(requests.length,beforeReduced,'reduced-motion navigation bypasses the media driver');
+assert.equal(scrollY,2450);
+media.matches=false;emit(media,'change');
+const beforeRewind=requests.length;
+emit(doc,'click',{target:rewind,button:0});
+assert.equal(requests.length,beforeRewind,'Rewind bypasses media playback');
+assert.equal(scrollY,0);assert.equal(mediaNav.progress,0);advance(16);
+assert.equal(doc.activeElement,ids.name,'immediate rewind retains focus transfer with a media driver installed');
+
+mediaNav.goTo(3);const interrupted=requests.at(-1);interrupted.onProgress(.1);
+const beforeDestroy=reported.length,destroyedPosition=scrollY;
+mediaNav.destroy();assert.equal(interrupted.cancellations,1,'destroy cancels external playback');
+interrupted.onProgress(2);interrupted.onComplete();advance(32);
+assert.equal(reported.length,beforeDestroy);assert.equal(scrollY,destroyedPosition,'destroyed navigation ignores every late player callback');
+assert.equal(history.scrollRestoration,'auto');
+
+// Autoplay rejection may complete immediately, before the cancel function is returned.
+location.hash='#name';let synchronousCleanup=0,synchronousPlays=0;
+const synchronousNav=initSectionNavigation({animateTransition({to,onProgress,onComplete}){
+ ++synchronousPlays;onProgress(to);onComplete();return ()=>{++synchronousCleanup;};
+}});
+synchronousNav.goTo(1);assert.equal(synchronousNav.progress,1);assert.equal(scrollY,880.75);
+assert.equal(synchronousPlays,1);assert.equal(synchronousCleanup,1,'a synchronously completed driver is cleaned up immediately');
+synchronousNav.goTo(0,{immediate:true});synchronousNav.destroy();
+assert.equal(synchronousCleanup,1,'its returned cancellation must not be retained as an active transition');
+console.log('Section navigation: precise poses, multi-leg stops, atomic gestures, momentum, hashes, touch cancellation, keyboard, resize, static/reduced-motion fallbacks and externally clocked media playback passed.');

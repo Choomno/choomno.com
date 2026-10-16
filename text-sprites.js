@@ -1,4 +1,4 @@
-import {projectReadingPlaneWithDepth, readingPhase} from './projection.js';
+import {projectReadingPlaneWithDepth, readingPhase} from './projection.js?v=prerendered-60-1';
 const copies = [...document.querySelectorAll('main > section .reading-copy')];
 let lastPhase = 0, sizes = [], enabled = false;
 
@@ -11,24 +11,36 @@ function measure() {
 export function projectText(phase) {
  lastPhase = phase;
  if (!enabled) return;
+ const stationIndex = copies.findIndex((_, i) => phase === readingPhase(i));
  copies.forEach((copy, i) => {
-  const separation = Math.abs(phase - readingPhase(i));
-  const phaseOpacity = Math.max(0, 1 - (separation / (Math.PI / 4)) ** 4);
   const {width, height} = sizes[i];
+  if (i === stationIndex && width > 0 && height > 0 && innerWidth > 0 && innerHeight > 0) {
+   // At its reading pose the projective plane is exactly this centered rectangle.
+   // A true 2D transform lets the browser repaint sharp text after perspective motion.
+   copy.style.visibility = 'visible';
+   copy.style.opacity = '1';
+   copy.style.transform = `translate(${(innerWidth - width) / 2}px, ${(innerHeight - height) / 2}px)`;
+   copy.style.willChange = 'auto';
+   copy.inert = false;
+   return;
+  }
+  const separation = Math.abs(phase - readingPhase(i));
+  const phaseOpacity = stationIndex >= 0 ? 0 : Math.max(0, 1 - (separation / (Math.PI / 4)) ** 4);
   const projection = phaseOpacity > 0 && projectReadingPlaneWithDepth(phase, readingPhase(i), width, height, innerWidth, innerHeight);
   const opacity = phaseOpacity * (projection?.nearOpacity ?? 0);
   const matrix = opacity > 0 && projection?.matrix;
   copy.style.visibility = matrix ? 'visible' : 'hidden';
   copy.style.opacity = String(opacity);
   copy.inert = !matrix || separation > Math.PI / 8;
-  if (matrix) copy.style.transform = `matrix3d(${matrix.join(',')})`;
+  copy.style.transform = matrix ? `matrix3d(${matrix.join(',')})` : '';
+  copy.style.willChange = matrix ? 'transform, opacity' : 'auto';
  });
 }
 export function setTextProjection(value) {
  enabled = value;
  document.documentElement.classList.toggle('projected-text', value);
  if (value) {measure(); projectText(lastPhase);}
- else copies.forEach(copy => {copy.style.transform='';copy.style.visibility='';copy.style.opacity='';copy.inert=false;});
+ else copies.forEach(copy => {copy.style.transform='';copy.style.visibility='';copy.style.opacity='';copy.style.willChange='';copy.inert=false;});
 }
 export function initTextSprites() {
  document.documentElement.classList.add('projected-text');

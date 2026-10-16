@@ -4,12 +4,55 @@ The homepage renders the complete hyperbolic complement of the
 Aitchison–Rubinstein dodecahedral knot listed in SnapPy as `odode02_00913`.
 Its decomposition has two regular ideal dodecahedra. The visible neutral
 scaffold is the thickened edge skeleton of the lifted decomposition.
+The intrinsic ray tracing runs offline; visitors play the resulting video
+and do not compile or execute the hyperbolic fragment shader.
 
 Each cell has twelve pentagonal faces, thirty edges, and twenty ideal
 vertices. All forty cell vertices identify to one cusp in the quotient.
 That cusp has infinitely many distinct lifts on the ideal boundary of
 hyperbolic space, so multiple ideal ends can appear in one view. The
 camera path is composed around those ends and the pentagonal chambers.
+
+## Prerendered playback
+
+The three adjacent camera routes have forward and reverse clips. Each is
+sampled at 60 fps, with 481 frames including both exact endpoints. The
+geometric timeline is 8 seconds; the last frame is presented at PTS 8.0,
+and the encoded container lasts 481/60 seconds. Reverse clips reuse exactly
+the same source frames in reverse order. Every source frame is evaluated by
+analytic ray tracing through the recorded face pairings; no optical-flow
+interpolation is used.
+
+Motion is rendered at 2880 × 1440 and Lanczos-downsampled to 1920 × 960.
+Station posters are rendered at 5760 × 2880 and reduced to 3840 × 1920.
+All renders use 160 face crossings and the same distance cutoff and material.
+Portrait assets are center crops of these masters: 720 × 960 video and
+1440 × 1920 posters. They preserve the vertical field of view while reducing
+mobile decoding and download costs.
+
+`tools/prerender-scene.mjs` exports the exact packed scene and the camera
+frames computed by `camera-path.js` and `transition-timing.js`.
+The native EGL renderer uses desktop OpenGL double precision for the offline
+geometry calculation. Its uniform buffer preserves the double-precision
+scene constants. The retained browser shader explicitly qualifies its geometry
+sampler as `highp`; single-precision ray tracing is not used for the media.
+Double precision removes the conspicuous fuzzy clouds produced by accumulated
+rounding in the earlier float32 face traversal.
+
+`prerendered.js` advances the HTML text and navigation from each presented
+video frame's `mediaTime`, using [`requestVideoFrameCallback`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback). A stalled or
+dropped frame therefore cannot advance text ahead of the displayed camera.
+Older browsers use the media element's playback time. There is no continuous
+application rendering loop while a reading station is at rest. MP4 and WebM
+provide alternative encodings (H.264/x264 CRF 18 and VP9 CRF 21); blocked playback, codec failures, or a long
+stall settle on the destination poster with functional text and navigation.
+
+Portrait and landscape masters use `object-fit: cover`. On viewports wider
+than the 2:1 master, `projection.js` uses the same cropped vertical field
+of view for the text. Ordinary viewports retain the original camera field.
+Pause, reduced motion, immediate rewind, hash changes, and resize cancel
+playback safely and restore exact reading positions. The manifest records
+source hashes, dimensions, sampling settings, and every asset's checksum.
 
 ## Cell data and identification
 
@@ -38,7 +81,7 @@ as a symmetry of the canonical dodecahedron followed by reflection in the
 target face. Vertices, normals, and matrices are constructed over
 Q(√3, √5). The JSON `exactCertificate` stores rational coefficients in the
 basis (1, √3, √5, √15), alongside the double-precision values used by the
-browser. The comparison with SnapPy's developed geometry has maximum error
+scene exporter. The comparison with SnapPy's developed geometry has maximum error
 less than 2.4 × 10⁻¹⁴. The complete manifold has one cusp and volume
 approximately 41.1603987078.
 
@@ -104,11 +147,30 @@ the same tube equation is
 
 This sum of squares avoids subtracting large, nearly equal longitudinal
 terms near a cusp. The basis is computed in double precision and stored in
-the GPU texture. For a camera ray with initial point p and tangent d, let
+the high-precision scene buffer. For a camera ray with initial point p and tangent d, let
 P = (⟨p,n₁⟩, ⟨p,n₂⟩), D = (⟨d,n₁⟩, ⟨d,n₂⟩), and ρ = sinh(r).
 Substitution gives the quadratic in q = tanh(s):
 
     (|D|² + ρ²)q² + 2(P·D)q + |P|² − ρ² = 0.
+
+The offline shader evaluates one quarter of the discriminant as
+
+    h = ρ² ((D − P)·(D + P) + ρ²) − det(P,D)²,
+
+using fused multiply-adds for the determinant. This avoids cancellation
+between the much larger quartic terms in the expanded discriminant.
+At a hit, the absolute cosine used for shading is
+
+    √h / (ρ √(1 + ρ²)).
+
+This follows by differentiating the tube equation along the unit-speed ray;
+it avoids constructing and normalizing a Lorentz normal with large,
+nearly cancelling components. These are algebraic rewrites of the same
+intersection and material calculation.
+
+`tests/tube-double.py` independently checks the discriminant and facing
+identities at 90 decimal digits on 900 boosted tube hits, including a
+float64 case where the expanded discriminant incorrectly becomes negative.
 
 Both roots are checked against the next face crossing, and the nearest
 positive hit is used. Every edge joins two ideal endpoints, so there are
@@ -184,8 +246,8 @@ rounded by the browser: a sidestep occupies only a few CSS scroll pixels,
 so those positions cannot drive the near text smoothly. In projected mode,
 scroll and visibility events consult the controller's unrounded progress.
 Immediate navigation, hashes, resizing, and reduced motion also report exact
-station positions. The monotone cubic mapping from native scroll to camera
-phase is retained for the ordinary document-flow fallback.
+station positions. In ordinary document flow the background selects the
+nearest station poster, keeping scrolling readable without video seeking.
 
 `tests/text-transition.mjs` verifies the timeline joins, reversal, fully
 opaque entry from the viewport edge, and a visible arrival of at least
@@ -208,7 +270,10 @@ In its station frame the plane has spatial depth 0.005, with its width and
 height scaled proportionally. At the matching reading pose it recovers the
 same centered HTML rectangle. Its small intrinsic size and proximity make
 the ambient geometry appear much larger by comparison during a sidestep.
-Viewport and font changes recalibrate the rectangle.
+Viewport and font changes recalibrate the rectangle. At an exact reading
+stop, this projective transform reduces to a centered translation; the page
+uses that equivalent 2D transform and releases compositor hints so text is
+rasterized sharply at rest.
 
 The plane is transparent except for its HTML text. It is drawn as a CSS
 projective overlay, with opacity reduced as its reading pose leaves view.
@@ -220,13 +285,15 @@ universal cover: the page does not generate deck-translated copies of the
 text or depth-test it against scaffold beams.
 The text is therefore a presentation layer, not additional quotient-invariant
 geometric scenery. Ordinary HTML flow remains available when the text will
-not fit the viewport, and a graphics failure does not remove the content.
+not fit the viewport, and a media failure does not remove the content.
 
 ## Numerical rendering limits
 
 The algebraic certificate specifies exact geometry and face pairings.
-JavaScript camera arithmetic uses doubles, while the GPU uses float32.
-Pixel resolution, a face crossing limit of 64 / 112 / 160, and a traveled
+JavaScript camera arithmetic and offline geometric ray tracing use doubles.
+The offline renderer preserves double precision in the scene constants,
+camera uniforms, face crossings, and tube intersections; material colors
+and the final encoded image have finite precision. Pixel resolution, a face crossing limit of 160, and a traveled
 distance cutoff of 20 bound rendering work. A local face-intersection
 parameter tanh(s) ≥ 0.999999 also terminates tracing to avoid unstable
 near-ideal arithmetic. Grazing intersections and very distant structure
@@ -261,7 +328,7 @@ the finite-to-ideal tube and cap calculations as regression coverage.
   Matsumoto, Segerman, Trettel and contributors, renders Thurston geometries
   and quotients in the browser. GPL-3.0-or-later. No code is bundled here.
 
-The browser renderer is an independent implementation of the stated
+The offline renderer is an independent implementation of the stated
 analytic geometry; it does not bundle another project's GLSL shader.
 
 ## Reproduce
@@ -270,8 +337,20 @@ Serve the repository root over HTTP:
 
     python -m http.server 8000 --bind 127.0.0.1
 
-No build step or browser library is needed for the renderer. WebGL 2 is
-required for the background; MathJax 3.2.2 loads from jsDelivr.
+No client build step, browser library, or WebGL context is needed for playback.
+MathJax 3.2.2 loads from jsDelivr. To regenerate media, install Python with
+Pillow, native EGL with desktop OpenGL double-precision support (such as Mesa),
+and FFmpeg with the required codecs:
+
+    node --experimental-default-type=module tools/prerender-scene.mjs /tmp/site-render
+    python tools/prerender-media.py --work /tmp/site-render --output media
+
+The raw frames stay outside the served repository. Rendering is resumable;
+source geometry and quality hashes must match before existing frames are reused.
+A custom encoder can be selected with `--ffmpeg /path/to/ffmpeg` or
+`FFMPEG_BINARY`. The build requires `libx264` and `libvpx-vp9`; a workspace-local
+`imageio-ffmpeg` installation can supply them without adding a site dependency.
+`--encode-only` changes compression without recalculating geometry.
 
 Regenerate the current data with `snappy==3.3.2` installed:
 
@@ -288,6 +367,15 @@ Check the current geometry and browser-independent navigation/projection:
     node --experimental-default-type=module tests/section-navigation.mjs
     node --experimental-default-type=module tests/text-transition.mjs
     node --experimental-default-type=module tests/scene-fallback.mjs
+    node --experimental-default-type=module tests/prerendered.mjs
+    node --experimental-default-type=module tests/media-assets.mjs
+
+With the native render dependencies installed, also verify the float32
+reference backend and the double-precision data, camera uniforms, and
+cancellation-resistant radial intersection against a fresh export:
+
+    python tests/prerender-native.py
+    python tests/tube-double.py
 
 The dodecahedral ray tests exercise paired-cell crossings and independent
 tube intersections in both directions along an edge. They also check
@@ -310,8 +398,6 @@ Its regression checks remain available:
     node --experimental-default-type=module tests/intrinsic.mjs
 
 The animation is a fixed full-page background with muted neutral beams.
-Background controls are collapsible, reduced-motion preferences are
-respected, and render resolution is capped at 1600 by 1000 to bound
-full-screen GPU work. During motion the pixel ratio is capped at 0.8 and
-the buffer at 1000 by 700. Full still quality returns automatically after
-120 milliseconds without camera movement; idle frames are not redrawn.
+Background controls are collapsible and reduced-motion preferences are respected.
+Visitors decode prerecorded clips during transitions and display a still image
+at each reading station.

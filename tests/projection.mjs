@@ -4,7 +4,7 @@ import {textPlaneDepth} from '../camera-path.js';
 import {dot, apply} from '../rhombic.js';
 const project = (m,x,y) => [(m[0]*x+m[4]*y+m[12])/(m[3]*x+m[7]*y+1),(m[1]*x+m[5]*y+m[13])/(m[3]*x+m[7]*y+1)];
 const close = (actual, expected, tolerance=1e-8) => assert.ok(Math.abs(actual-expected)<tolerance, `${actual} != ${expected}`);
-for (const [vw,vh,width,height] of [[1440,900,440,280],[625,780,440,300],[390,844,343.2,345],[320,568,281.6,390]]) {
+for (const [vw,vh,width,height] of [[5120,1440,620,330],[3440,1440,620,330],[1440,900,440,280],[625,780,440,300],[390,844,343.2,345],[320,568,281.6,390]]) {
  for(let i=0;i<4;i++) {
   const p=readingPhase(i), m=projectReadingPlane(p,p,width,height,vw,vh);
   const projection=projectReadingPlaneWithDepth(p,p,width,height,vw,vh);
@@ -34,11 +34,13 @@ for(let i=0;i<3;i++){
 }
 // Independent incidence test: the rendered pixel's hyperbolic ray must meet
 // the stationary totally geodesic text plane at the selected text coordinate.
-for (const offset of [-.0003, -.00015, 0, .00015, .0003]) {
+for (const [vw,vh] of [[1440,900],[3440,1440],[5120,1440]]) for (const offset of [-.0003, -.00015, 0, .00015, .0003]) {
  const stationPhase=readingPhase(1),phase=stationPhase+offset;
  const camera=readingPose(phase),station=readingPose(stationPhase);
- const width=440,height=280,vw=1440,vh=900,z=textPlaneDepth;
- const half=z*.82*width/vh,vertical=half*height/width;
+ const width=440,height=280,z=textPlaneDepth;
+ // Independent CSS cover calculation: the displayed 2:1 image must cover both axes.
+ const displayedHeight=Math.max(vh,vw/2),focal=displayedHeight/(2*.82);
+ const half=z*width/(2*focal),vertical=half*height/width;
  const time=Math.sqrt(1+half*half+vertical*vertical+z*z);
  const x=.23*width,y=.67*height;
  const expectedRaw=apply(station,[time,-half+2*half*x/width,vertical-2*vertical*y/height,z]);
@@ -46,7 +48,7 @@ for (const offset of [-.0003, -.00015, 0, .00015, .0003]) {
  const projection=projectReadingPlaneWithDepth(phase,stationPhase,width,height,vw,vh);
  assert.ok(projection.nearOpacity>0&&projection.matrix,'incidence sample must be visibly in front of the camera');
  const [u,v]=project(projection.matrix,x,y);
- const direction=[.82*(2*u-vw)/vh,.82*(vh-2*v)/vh,1];
+ const direction=[(u-vw/2)/focal,(vh/2-v)/focal,1];
  const length=Math.hypot(...direction),d=apply(camera,[0,...direction.map(v=>v/length)]);
  const eye=camera.map(row=>row[0]),normal=apply(station,[z,0,0,time]);
  const q=-dot(eye,normal)/dot(d,normal);assert.ok(q>0&&q<1);

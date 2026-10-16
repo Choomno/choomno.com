@@ -36,9 +36,9 @@ export function beamData(domain){
  });
 }
 
-export function packScene(data){
+export function packScene(data,TexelArray=Float32Array){
  const faces=data.cells[0].planes.length,edges=data.cells[0].edges.length,stride=Math.max(faces,edges);
- const texels=new Float32Array(data.cells.length*stride*8*4);
+ const texels=new TexelArray(data.cells.length*stride*8*4);
  data.cells.forEach((domain,cell)=>{
   if(domain.planes.length!==faces||domain.edges.length!==edges)throw Error('Renderer requires uniform polyhedral cell types');
   for(let i=0;i<faces;i++){
@@ -58,7 +58,7 @@ export function packScene(data){
 function fragmentShader(faces,edges,stride){return `#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D manifold;
+uniform highp sampler2D manifold;
 uniform mat4 camera;
 uniform int cameraCell;
 uniform vec2 resolution;

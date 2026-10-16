@@ -38,6 +38,7 @@ function independent(p,d,{a,t}){
   .filter(y=>y>1+1e-9).map(y=>.5*Math.log(y));
 }
 const beams=beamData(data.cells[0]),packed=packScene(data);
+assert.match(packed.fragment,/uniform highp sampler2D manifold;/,'Float32 scene data must not be rounded by an implicit low-precision sampler');
 for(let edge=0;edge<beams.length;edge++){
  const {a,t,n1,n2}=beams[edge];
  for(const n of [n1,n2]){close(dot(n,n),1,2e-13);close(dot(n,a),0,2e-13);close(dot(n,t),0,2e-13);}

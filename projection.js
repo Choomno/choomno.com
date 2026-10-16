@@ -1,8 +1,12 @@
 import {dot} from './intrinsic.js';
+import {masterAspect} from './media-settings.js';
 import {readingPhase,readingPose,textPlaneDepth} from './camera-path.js';
 export {readingPhase,readingPose} from './camera-path.js';
 
 export const fieldScale = .82;
+// object-fit:cover crops the vertical field on viewports wider than a master.
+// Apply the identical focal length to the text so rays remain aligned.
+export const viewportFieldScale=(width,height)=>fieldScale*Math.min(1,masterAspect*height/width);
 
 // Fade the whole transparent plane before any corner reaches the near clip.
 // The quintic joins constant opacity with zero first and second derivatives.
@@ -19,7 +23,8 @@ export function nearPlaneOpacity(minimumDepth) {
 export function projectReadingPlaneWithDepth(phase, stationPhase, width, height, viewportWidth, viewportHeight) {
  if (!(width > 0 && height > 0 && viewportWidth > 0 && viewportHeight > 0)) return null;
  const camera = readingPose(phase), station = readingPose(stationPhase);
- const z = textPlaneDepth, half = z * fieldScale * width / viewportHeight, vertical = half * height / width;
+ const scale = viewportFieldScale(viewportWidth,viewportHeight);
+ const z = textPlaneDepth, half = z * scale * width / viewportHeight, vertical = half * height / width;
  const time = Math.sqrt(1 + half * half + vertical * vertical + z * z);
  const apply = (m, v) => m.map(row => row.reduce((sum, x, i) => sum + x * v[i], 0));
  const spatial = v => [1, 2, 3].map(col => dot(camera.map(row => row[col]), apply(station, v)));
@@ -31,7 +36,7 @@ export function projectReadingPlaneWithDepth(phase, stationPhase, width, height,
  const minimumDepth = Math.min(...corners.map(p => p[2]));
  const nearOpacity = nearPlaneOpacity(minimumDepth);
  if (minimumDepth <= textPlaneDepth * .025) return {matrix: null, minimumDepth, nearOpacity};
- const focal = viewportHeight / (2 * fieldScale), denominator = origin[2];
+ const focal = viewportHeight / (2 * scale), denominator = origin[2];
  const horizontal = p => (viewportWidth / 2 * p[2] + focal * p[0]) / denominator;
  const downward = p => (viewportHeight / 2 * p[2] - focal * p[1]) / denominator;
  const matrix = [horizontal(dx), downward(dx), 0, dx[2] / denominator,

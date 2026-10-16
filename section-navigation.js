@@ -20,12 +20,13 @@ export class WheelIntent {
  }
 }
 
-export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProgress=()=>{}}={}){
+export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProgress=()=>{},animateTransition=null}={}){
  const sections=[...document.querySelectorAll('main > section')];
  if(!sections.length)return null;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)'),wheel=new WheelIntent();
  const listeners=[];
  let active=0,progress=0,moving=false,animation=0,resizeFrame=0,touch=null,multiTouch=false,ignoreClickUntil=0,pointerFocusUntil=0,destroyed=false;
+ let transitionId=0,cancelTransition=null;
  const oldRestoration=history.scrollRestoration;
  history.scrollRestoration='manual';
  const position=i=>{
@@ -51,7 +52,10 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   counter.textContent=`${active+1} / ${sections.length}`;
   counter.setAttribute('aria-label',`Section ${active+1} of ${sections.length}`);
  }
- function stop(){cancelAnimationFrame(animation);animation=0;moving=false;}
+ function stop(){
+  ++transitionId;cancelAnimationFrame(animation);animation=0;moving=false;
+  const cancel=cancelTransition;cancelTransition=null;cancel?.();
+ }
  function goTo(index,{immediate=false,updateHash=true,interrupt=false,focusTarget=null}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
   const startIndex=active;
@@ -70,7 +74,30 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   if(updateHash)history.replaceState(history.state,'',hashFor(active));
   onChange(active);document.dispatchEvent(new CustomEvent('sectionchange',{detail:{index:active}}));
   if(!duration||startIndex===active||Math.abs(end-start)<.75){window.scrollTo(0,end);report(active);updateControls();focusDestination();return true;}
-  moving=true;updateControls();const began=performance.now();
+  moving=true;updateControls();
+  if(animateTransition){
+   const id=transitionId;
+   const current=()=>!destroyed&&moving&&id===transitionId;
+   const cancel=animateTransition({from:startIndex,to:active,onProgress(value){
+    if(!current()||!Number.isFinite(value))return;
+    if(!isEnabled()){stop();updateControls();return;}
+    const p=clamp(value,Math.min(startIndex,active),Math.max(startIndex,active));
+    const low=Math.floor(p),high=Math.ceil(p);
+    // The media clock supplies an unrounded logical position. Native scroll
+    // follows it, while text and camera projection use the original value.
+    window.scrollTo(0,position(low)+(position(high)-position(low))*(p-low));report(p);
+   },onComplete(){
+    if(!current())return;
+    if(!isEnabled()){stop();updateControls();return;}
+    ++transitionId;cancelTransition=null;moving=false;
+    window.scrollTo(0,position(active));report(active);updateControls();focusDestination();
+   }});
+   // A failed or unavailable media player may complete synchronously.
+   if(current())cancelTransition=typeof cancel==='function'?cancel:null;
+   else if(typeof cancel==='function')cancel();
+   return true;
+  }
+  const began=performance.now();
   function step(now){
    if(destroyed||!isEnabled()){stop();updateControls();return;}
    const elapsed=Math.min(duration,now-began),leg=Math.min(stops.length-2,Math.floor(elapsed/legDuration));

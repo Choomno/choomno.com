@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {transitionProgress,textSlideDuration,travelDuration,transitionDuration} from '../transition-timing.js';
 import {readingPhase,routeJoinPhases} from '../camera-path.js';
 import {projectReadingPlaneWithDepth} from '../projection.js';
+import {videoFramesPerSecond as fps} from '../media-settings.js';
 const close=(a,b,tolerance=1e-10)=>assert.ok(Math.abs(a-b)<tolerance,`${a} != ${b}`);
 const pixel=(m,x,y)=>[(m[0]*x+m[4]*y+m[12])/(m[3]*x+m[7]*y+1),(m[1]*x+m[5]*y+m[13])/(m[3]*x+m[7]*y+1)];
 for(let leg=0;leg<3;leg++){
@@ -28,7 +29,7 @@ for(let leg=0;leg<3;leg++){
  }
 
 }
-// At 30fps, the final lateral approach must visibly slide across the viewport
+// At the encoded frame rate, the final lateral approach must visibly slide across the viewport
 // for long enough to read as motion. It must already be opaque at the edge,
 // rather than appearing through an opacity/near-clip change in the middle.
 let minimumVisible=Infinity,maximumStep=0;
@@ -36,7 +37,7 @@ for(const [vw,vh,width,height] of [[1440,900,620,330],[625,780,360,360],[390,844
  for(let leg=0;leg<3;leg++)for(const direction of [1,-1]){
   const station=direction===1?leg+1:leg;
   let first=null,last=null;
-  for(let t=textSlideDuration+travelDuration;t<=transitionDuration+1;t+=1000/30){
+  for(let t=textSlideDuration+travelDuration;t<=transitionDuration+1;t+=1000/fps){
    const fraction=transitionProgress(Math.min(t,transitionDuration),leg);
    const phase=readingPhase(leg+(direction===1?fraction:1-fraction));
    const projection=projectReadingPlaneWithDepth(phase,readingPhase(station),width,height,vw,vh);
@@ -47,11 +48,11 @@ for(const [vw,vh,width,height] of [[1440,900,620,330],[625,780,360,360],[390,844
    assert.equal(projection.nearOpacity,1,'Text is fully opaque as it slides into view');
    if(first===null){first=t;assert.ok(direction===1?left>vw-45:right<45,'The text enters through the side of the viewport');}
    const center=pixel(projection.matrix,width/2,height/2);
-   if(last){const displacement=Math.hypot(center[0]-last[0],center[1]-last[1]);maximumStep=Math.max(maximumStep,displacement);assert.ok(displacement<55,'Text must not jump between 30fps frames');}
+   if(last){const displacement=Math.hypot(center[0]-last[0],center[1]-last[1]);maximumStep=Math.max(maximumStep,displacement);assert.ok(displacement<55*30/fps,'Text must not jump between encoded frames');}
    last=center;
   }
   assert.ok(first!==null);minimumVisible=Math.min(minimumVisible,transitionDuration-first);
   assert.ok(transitionDuration-first>600,'The visible approach takes at least 0.6 seconds');
  }
 }
-console.log(`Text transition checks passed: smooth reversible timeline, fully opaque edge entry, at least ${minimumVisible.toFixed(0)}ms visible approach, at most ${maximumStep.toFixed(1)}px per frame at 30fps.`);
+console.log(`Text transition checks passed: smooth reversible timeline, fully opaque edge entry, at least ${minimumVisible.toFixed(0)}ms visible approach, at most ${maximumStep.toFixed(1)}px per frame at ${fps}fps.`);
