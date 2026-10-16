@@ -23,10 +23,20 @@ After a spatial orthogonal change of coordinates, the domain has:
 
 The exporter checks the numerical conjugation before recognizing integer and
 half-integer entries. The tests then use exact rational arithmetic to verify
-Lorentz preservation, inverse pairings, face and edge images, vertex classes,
-and the three cusp identifications. This is the actual Borromean quotient,
-not an arbitrary reflection orbifold. Its canonical decomposition also has
-two regular ideal octahedra.
+Lorentz and orientation preservation, inverse pairings, face and edge images,
+and identity holonomy around each of the six quotient edges. Four right
+wedges meet at every edge. Computing the vertex links from the pairings gives
+one spherical finite vertex link (6 vertices, 12 edges, 8 triangles) and
+three torus cusp links (2 vertices, 4 edges, 2 squares each). The pairings
+preserve compatible horospheres at ideal vertices.
+
+The identification with the Borromean complement comes from SnapPy's L6a4
+triangulation. The exporter reconstructs the quotient from the Dirichlet
+domain and compares its isometry signature with L6a4. The rhombic and
+tetrahedral exports also have matching signatures and volume
+7.327724753417752. These provenance checks use SnapPy; the rational checks
+independently verify the supplied geometric gluing data. Its canonical
+decomposition also has two regular ideal octahedra.
 
 `borromean-data.json` retains the independent eight-tetrahedron description
 of the same manifold, including an exact certificate over Q(i) for all eight
@@ -44,17 +54,28 @@ For a face normal n, its intersection parameter is
     tanh(s) = −⟨p,n⟩ / ⟨v,n⟩.
 
 Both point and tangent are transformed by the exact face pairing and tracing
-continues in the paired cell. Camera motion uses these same identifications. Automatic motion places the camera on a circular orbit about the finite center
+continues in the paired cell. Camera motion uses these same identifications.
+The camera follows a circular orbit about the finite center
 of a fundamental cell, at hyperbolic distance 2.4 from that center. The camera
 looks inward toward the center throughout the orbit and its vertical axis
 stays fixed. At this radius the orbit approaches the ideal vertices and crosses
 fundamental faces; each pose is reduced through the actual face pairings before
 ray tracing. Each pose is a spatial rotation of a radial Lorentz boost followed
-by a half-turn of the camera. Section reading positions drive the orbit through three eighths of a revolution; scrolling
-up reverses it. There is no automatic time-based movement. An exponential interpolation with a 1/3-second time constant smooths scroll
-input. The sparse personal sections also distribute this movement over a longer
-page. Pause background freezes the current pose;
-Resume background synchronizes it to the current scroll position.
+by a half-turn of the camera. Section reading positions drive the orbit through
+three eighths of a revolution, with reverse navigation retracing the path.
+The phase convention is `readingPose(phase) = cellTurn(-phase)`, so text enters
+from the right. At Background (phase pi/4), the +z ideal endpoint is precisely
+behind the camera.
+
+Each wheel gesture, swipe, tap, or navigation control selects one section.
+The scroll coordinate moves between section centers over 1.1 seconds using
+quintic smootherstep. A monotone cubic interpolation maps that coordinate
+to camera phase; both the background and text use this same phase with no
+additional lag. The camera rests at a reading pose between gestures.
+Pause background freezes its pose while text navigation selects centered
+stills. Reduced-motion preferences similarly use immediate section changes
+and a static background. Resume background synchronizes with the selected
+section.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
 ⟨a,u⟩=−1, and set t=u−a. A tube of hyperbolic radius r around that geodesic ray
@@ -67,11 +88,28 @@ finite vertices join the incident beams. The radius is 0.035 in curvature −1
 units. Geodesics and intersections are analytic; no Euclidean perspective
 substitute or numerical ODE integrator is used.
 
-The optional Cusp colors control tints a beam toward the cusp of its ideal
-endpoint. It labels the ideal ends of the scaffold; it does not draw an axis
-or add a boundary at a finite distance. The default uses a neutral ceramic material, narrow warm reflections, and a
-charcoal background. Depth attenuation keeps distant structure subordinate. Shading and distance attenuation are
-presentation choices rather than a global illumination calculation.
+The page uses a neutral ceramic material, narrow warm reflections, and a
+charcoal background. The shader retains an optional cusp tint, but the page
+keeps it disabled. Depth attenuation keeps distant structure subordinate.
+Shading and distance attenuation are presentation choices rather than a
+global illumination calculation.
+
+## Projected text
+
+Each reading block is anchored to a plane at its corresponding camera stop.
+`projection.js` constructs the plane in homogeneous Klein coordinates and
+projects it using the inverse Lorentz camera frame and the renderer's field
+of view. Its projective interpolation lies in a totally geodesic plane.
+At the matching reading pose the projection recovers the centered HTML text
+rectangle; viewport and font changes recalibrate that rectangle.
+
+The plane is transparent except for its HTML text. It is drawn as a CSS
+projective overlay, with opacity reduced as its reading pose leaves view.
+These are selected lifts in the universal cover: the page does not generate
+deck-translated copies of the text or depth-test it against scaffold beams.
+The text is therefore a presentation layer, not additional quotient-invariant
+geometric scenery. Ordinary HTML flow remains available when the text will
+not fit the viewport, and a graphics failure does not remove the content.
 
 ## Numerical rendering limits
 
@@ -105,8 +143,8 @@ Serve the repository root over HTTP:
 
     python -m http.server 8000 --bind 127.0.0.1
 
-No build step or browser library is needed for the renderer. WebGL 2 is required;
-MathJax 3.2.2 loads from jsDelivr. Existing secondary pages keep their shared layout.
+No build step or browser library is needed for the renderer. WebGL 2 is required
+for the background; MathJax 3.2.2 loads from jsDelivr.
 
 Regenerate the data with `snappy==3.3.2` installed:
 
@@ -119,14 +157,12 @@ Run independent checks:
     node --experimental-default-type=module tests/rhombic.mjs
     python tests/exact_gluing.py
     node --experimental-default-type=module tests/intrinsic.mjs
+    node --experimental-default-type=module tests/scroll-choreography.mjs
+    node --experimental-default-type=module tests/projection.mjs
+    node --experimental-default-type=module tests/section-navigation.mjs
+    node --experimental-default-type=module tests/scene-fallback.mjs
 
-The animation is a fixed full-page background with muted neutral beams. A
-directional dark overlay preserves text contrast. Background controls are
+The animation is a fixed full-page background with muted neutral beams.
+Background controls are
 collapsible, reduced-motion preferences are respected, and render resolution
 is capped at 1600 by 1000 to bound full-screen GPU work.
-
-Section reading positions keyframe the camera: Background reaches phase π/4,
-Currently π/2, and Elsewhere 3π/4. At Background the +x ideal endpoint is
-precisely behind the camera. A monotone cubic interpolation passes through these poses with continuous,
-nonzero scroll velocity, avoiding pauses around section centers. Temporal
-smoothing remains active. The final easing step reaches the exact target.
