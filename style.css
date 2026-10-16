@@ -17,3 +17,7 @@
 .personal-section,.current,.elsewhere{min-height:100svh;padding-top:100px;padding-bottom:100px}
 .elsewhere{margin-top:12svh;margin-bottom:12svh}
 @media(max-width:650px){.personal-section,.current,.elsewhere{min-height:100svh;padding-top:85px;padding-bottom:85px}}
+/* The final viewport ends at Elsewhere; the footer occupies its lower edge. */
+body{position:relative}
+.elsewhere{margin-bottom:0}
+footer{position:absolute;bottom:0;left:6%;right:6%;margin-left:auto;margin-right:auto}
