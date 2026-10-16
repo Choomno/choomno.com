@@ -32,7 +32,7 @@ async function main(){
    const rect=document.querySelector(selector).getBoundingClientRect();
    return {y:window.scrollY+rect.top+rect.height/2-window.innerHeight/2,phase:(i+1)*Math.PI/4};
   });
-  targetPhase=phaseAtScroll(window.scrollY,landmarks,window.innerHeight*.16);
+  targetPhase=phaseAtScroll(window.scrollY,landmarks);
  }
  function state(){play.textContent=running?'Pause background':'Resume background';play.setAttribute('aria-pressed',String(running));}
  setOrbit();updateScroll();state();

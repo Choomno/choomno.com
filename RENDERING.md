@@ -125,8 +125,8 @@ directional dark overlay preserves text contrast. Background controls are
 collapsible, reduced-motion preferences are respected, and render resolution
 is capped at 1600 by 1000 to bound full-screen GPU work.
 
-Section reading positions keyframe the camera: Background holds phase π/4,
+Section reading positions keyframe the camera: Background reaches phase π/4,
 Currently π/2, and Elsewhere 3π/4. At Background the +x ideal endpoint is
-precisely behind the camera. Each pose holds across a 32%-of-viewport reading
-interval, with smoothstep transitions and temporal smoothing between intervals.
-The final easing step snaps to its exact target rather than stopping short.
+precisely behind the camera. A monotone cubic interpolation passes through these poses with continuous,
+nonzero scroll velocity, avoiding pauses around section centers. Temporal
+smoothing remains active. The final easing step reaches the exact target.
