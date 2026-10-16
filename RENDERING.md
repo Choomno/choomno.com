@@ -50,7 +50,7 @@ looks inward toward the center throughout the orbit and its vertical axis
 stays fixed. At this radius the orbit approaches the ideal vertices and crosses
 fundamental faces; each pose is reduced through the actual face pairings before
 ray tracing. Each pose is a spatial rotation of a radial Lorentz boost followed
-by a half-turn of the camera. Page scroll progress drives the orbit through half a revolution; scrolling
+by a half-turn of the camera. Section reading positions drive the orbit through three eighths of a revolution; scrolling
 up reverses it. There is no automatic time-based movement. An exponential interpolation with a 1/3-second time constant smooths scroll
 input. The sparse personal sections also distribute this movement over a longer
 page. Pause background freezes the current pose;
@@ -124,3 +124,9 @@ The animation is a fixed full-page background with muted neutral beams. A
 directional dark overlay preserves text contrast. Background controls are
 collapsible, reduced-motion preferences are respected, and render resolution
 is capped at 1600 by 1000 to bound full-screen GPU work.
+
+Section reading positions keyframe the camera: Background holds phase π/4,
+Currently π/2, and Elsewhere 3π/4. At Background the +x ideal endpoint is
+precisely behind the camera. Each pose holds across a 32%-of-viewport reading
+interval, with smoothstep transitions and temporal smoothing between intervals.
+The final easing step snaps to its exact target rather than stopping short.

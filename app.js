@@ -1,3 +1,4 @@
+import {phaseAtScroll} from './scroll-choreography.js';
 import {identity,advance,fragment,beamData,cellTurn} from './rhombic.js';
 const canvas=document.querySelector('#space'),fallback=document.querySelector('#fallback');
 const gl=canvas.getContext('webgl2',{alpha:false,antialias:false});
@@ -26,16 +27,21 @@ async function main(){
  let running=!reduced.matches,phase=0,targetPhase=0,frame=identity(),tet=0,dirty=true,last=0;
  function setOrbit(){({frame,tet}=advance(identity(),0,cellTurn(phase),data));dirty=true;}
  function updateScroll(){
-  const range=document.documentElement.scrollHeight-window.innerHeight;
-  targetPhase=Math.PI*(range>0?Math.max(0,Math.min(1,window.scrollY/range)):0);
+  const selectors=['#background','.current','.elsewhere'];
+  const landmarks=selectors.map((selector,i)=>{
+   const rect=document.querySelector(selector).getBoundingClientRect();
+   return {y:window.scrollY+rect.top+rect.height/2-window.innerHeight/2,phase:(i+1)*Math.PI/4};
+  });
+  targetPhase=phaseAtScroll(window.scrollY,landmarks,window.innerHeight*.16);
  }
  function state(){play.textContent=running?'Pause background':'Resume background';play.setAttribute('aria-pressed',String(running));}
  setOrbit();updateScroll();state();
  function draw(time){
   requestAnimationFrame(draw);const dt=Math.min((time-last)/1000,.1);last=time;
   if(document.hidden)return;
-  if(running&&Math.abs(targetPhase-phase)>1e-6){
-   phase+=(targetPhase-phase)*(1-Math.exp(-dt*3));setOrbit();
+  if(running&&targetPhase!==phase){
+   phase=Math.abs(targetPhase-phase)<1e-4?targetPhase:phase+(targetPhase-phase)*(1-Math.exp(-dt*3));
+   setOrbit();
   }
   if(!dirty)return;dirty=false;
   const rect=canvas.getBoundingClientRect(),quality=Number(detail.value),ratio=Math.min(quality,1600/rect.width,1000/rect.height);
