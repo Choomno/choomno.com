@@ -87,7 +87,7 @@ void main(){
    vec4 normal=cap?cr*hit-a:cr2*hit+ld(hit,a)*a-ld(hit,t)*t;
    normal/=sqrt(max(ld(normal,normal),1e-12));
    float facing=clamp(abs(ld(direction,normal)),0.,1.);
-   vec3 color=vec3(.69,.67,.63);
+   vec3 color=vec3(.27,.265,.25);
    if(cuspColors&&!cap){
     int cusp=int(datum(object,7).y+.5);
     vec3 tint=cusp==0?vec3(.95,.49,.32):cusp==1?vec3(.25,.79,.66):vec3(.38,.58,.98);
@@ -99,8 +99,8 @@ void main(){
    float rim=pow(1.-facing,3.);
    // Neutral ceramic body, a narrow warm reflection, and distance falloff.
    vec3 lit=color*(.11+.72*sqrt(facing));
-   lit+=vec3(.96,.85,.66)*.20*pow(facing,70.);
-   lit+=vec3(.33,.29,.23)*rim*.12;
+   lit+=vec3(.78,.74,.67)*.045*pow(facing,70.);
+   lit+=vec3(.24,.23,.21)*rim*.06;
    float visibility=1./(1.+.18*pow(sinh(min(total,12.)),2.));
    vec3 mapped=vec3(1.)-exp(-lit*1.65);
    pixel=vec4(pow(mix(background,mapped,visibility),vec3(1./2.2)),1.);return;

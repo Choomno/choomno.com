@@ -50,8 +50,10 @@ looks inward toward the center throughout the orbit and its vertical axis
 stays fixed. At this radius the orbit approaches the ideal vertices and crosses
 fundamental faces; each pose is reduced through the actual face pairings before
 ray tracing. Each pose is a spatial rotation of a radial Lorentz boost followed
-by a half-turn of the camera. Manual navigation pauses the orbit; Resume orbit
-restores it.
+by a half-turn of the camera. Page scroll progress drives the orbit through one complete revolution; scrolling
+up reverses it. There is no automatic time-based movement. A short exponential
+interpolation smooths scroll input. Pause background freezes the current pose;
+Resume background synchronizes it to the current scroll position.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
 ⟨a,u⟩=−1, and set t=u−a. A tube of hyperbolic radius r around that geodesic ray
@@ -116,3 +118,8 @@ Run independent checks:
     node --experimental-default-type=module tests/rhombic.mjs
     python tests/exact_gluing.py
     node --experimental-default-type=module tests/intrinsic.mjs
+
+The animation is a fixed full-page background with muted neutral beams. A
+directional dark overlay preserves text contrast. Background controls are
+collapsible, reduced-motion preferences are respected, and render resolution
+is capped at 1600 by 1000 to bound full-screen GPU work.
