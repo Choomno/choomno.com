@@ -41,4 +41,4 @@ header,footer{text-shadow:0 1px 4px #000}
 
 /* Explicit equal dimensions keep both endpoint backings circular. */
 .intro .reading-copy,.elsewhere .reading-copy{container-type:inline-size}
-.intro .reading-copy::before,.elsewhere .reading-copy::before{inset:auto;left:50%;top:50%;width:calc(100cqw + 180px);height:calc(100cqw + 180px);aspect-ratio:1;transform:translate(-50%,-50%);background:radial-gradient(circle closest-side at center,#0b0d0bfa 0%,#0b0d0be8 40%,#0b0d0bb8 60%,#0b0d0b60 78%,#0b0d0b18 91%,transparent 100%)}
+.intro .reading-copy::before,.elsewhere .reading-copy::before{inset:auto;left:50%;top:50%;width:calc(100cqw + 60px);height:calc(100cqw + 60px);aspect-ratio:1;transform:translate(-50%,-50%);background:radial-gradient(circle closest-side at center,#0b0d0bfa 0%,#0b0d0be8 40%,#0b0d0bb8 60%,#0b0d0b60 78%,#0b0d0b18 91%,transparent 100%)}
