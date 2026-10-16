@@ -34,7 +34,7 @@ export function createVideoCache(){
    if(response.body?.getReader){
     const reader=response.body.getReader(),chunks=[];
     while(true){const {done,value}=await reader.read();if(done)break;guard();chunks.push(value);}
-    blob=new Blob(chunks,{type:response.headers.get('Content-Type')||(entry.url.endsWith('.webm')?'video/webm':'video/mp4')});
+    blob=new Blob(chunks,{type:response.headers.get('Content-Type')||(entry.url.split('?')[0].endsWith('.webm')?'video/webm':'video/mp4')});
    }else blob=await response.blob();
    if(active!==task||destroyed||controller.signal.aborted)return;
    entry.objectURL=URL.createObjectURL(blob);entry.state='ready';

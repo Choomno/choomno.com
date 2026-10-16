@@ -20,11 +20,11 @@ function advance(ms){
 }
 async function flush(){for(let i=0;i<6;i++)await Promise.resolve();}
 class Video {
- constructor({mp4=true,frameCallbacks=true}={}){
-  this.mp4=mp4;this.frames=new Map();this.loads=[];this.plays=[];this.currentTime=0;this.paused=true;this.readyState=4;this.hidden=true;
+ constructor({mp4=true,av1=!mp4,frameCallbacks=true}={}){
+  this.mp4=mp4;this.av1=av1;this.frames=new Map();this.loads=[];this.plays=[];this.currentTime=0;this.paused=true;this.readyState=4;this.hidden=true;
   if(!frameCallbacks)this.requestVideoFrameCallback=undefined;
  }
- canPlayType(type){return this.mp4&&type.startsWith('video/mp4')?'probably':'';}
+ canPlayType(type){return (this.mp4&&type.startsWith('video/mp4')||this.av1&&type==='video/webm; codecs="av01.0.09M.10"')?'probably':'';}
  abortPending(){for(const play of this.plays)if(play.pending){play.pending=false;play.reject(new DOMException('Interrupted media request','AbortError'));}}
  load(){this.abortPending();this.loads.push(this.src);this.currentTime=0;}
  pause(){this.paused=true;this.abortPending();}
@@ -87,10 +87,10 @@ function fixture(options){
 
 // Loading a codec fallback rejects the old play promise in real browsers.
 {
- const f=fixture();f.navigate(0,1);
+ const f=fixture({mp4:true,av1:true});f.navigate(0,1);
  const oldFrame=[...f.video.frames.values()][0];f.video.onerror();
- assert.equal(f.video.src,transitionVideo(0,1,'webm'));
- await flush();assert.equal(f.player.playing,true);assert.equal(f.completions,0,'the aborted MP4 play promise cannot cancel the WebM attempt');
+ assert.equal(f.video.src,transitionVideo(0,1,'mp4'));
+ await flush();assert.equal(f.player.playing,true);assert.equal(f.completions,0,'the aborted AV1 play promise cannot cancel the H.264 attempt');
  oldFrame(now,{mediaTime:3});assert.deepEqual(f.progress,[0],'retry aligns the text with its source poster while the alternate clip loads');
  f.video.present(.4);assert.equal(f.progress.at(-1),transitionProgress(400,0));
  f.video.onerror();assert.equal(f.player.playing,false);assert.equal(f.completions,1);assert.equal(f.still.src,stationImage(1));
@@ -150,17 +150,17 @@ function fixture(options){
  assert.equal(portraitAspect,3/4);
  for(const [width,height,portrait] of [[390,844,true],[600,800,true],[601,800,false],[1280,800,false]]){
   globalThis.innerWidth=width;globalThis.innerHeight=height;
-  const f=fixture();f.player.showStation(0);
+  const f=fixture({mp4:true,av1:true});f.player.showStation(0);
   assert.equal(f.still.src,stationImage(0));assert.equal(f.portraitSource.srcset,stationImage(0,true),'picture sources identify the same station for either viewport');
   f.player.showStation(0);assert.equal(f.stillWrites.length,1);assert.equal(f.portraitWrites.length,1,'repeated station updates avoid restarting image selection');
-  f.navigate(0,2);assert.equal(f.video.src,transitionVideo(0,1,'mp4',portrait));
+  f.navigate(0,2);assert.equal(f.video.src,transitionVideo(0,1,'webm',portrait));
   assert.equal(preloads.at(-1).src,stationImage(1,portrait));assert.equal(preloads.at(-1).fetchPriority,'low');
-  f.video.onerror();assert.equal(f.video.src,transitionVideo(0,1,'webm',portrait),'format retry preserves the selected responsive variant');
+  f.video.onerror();assert.equal(f.video.src,transitionVideo(0,1,'mp4',portrait),'format retry preserves the selected responsive variant');
   f.video.present(.4);assert.equal(f.progress.at(-1),transitionProgress(400,0),'responsive crops share the same camera clock');
   f.video.onended();assert.equal(f.still.src,stationImage(1));assert.equal(f.portraitSource.srcset,stationImage(1,true));
-  assert.equal(f.video.src,transitionVideo(1,1,'webm',portrait));assert.equal(preloads.at(-1).src,stationImage(2,portrait));
+  assert.equal(f.video.src,transitionVideo(1,1,'mp4',portrait));assert.equal(preloads.at(-1).src,stationImage(2,portrait));
   f.video.onended();assert.equal(f.portraitSource.srcset,stationImage(2,true));
-  f.navigate(2,1);assert.equal(f.video.src,transitionVideo(1,-1,'webm',portrait));assert.equal(preloads.at(-1).src,stationImage(1,portrait));
+  f.navigate(2,1);assert.equal(f.video.src,transitionVideo(1,-1,'mp4',portrait));assert.equal(preloads.at(-1).src,stationImage(1,portrait));
   f.video.onended();assert.equal(f.portraitSource.srcset,stationImage(1,true));await flush();f.player.destroy();
  }
  // The app settles on resize, then the next navigation chooses the new master.
@@ -175,19 +175,19 @@ function fixture(options){
 // Unsupported codecs may surface through play() before, or together with, an
 // error event. Either ordering must spend exactly one alternate-format retry.
 {
- const f=fixture();f.navigate(0,1);
+ const f=fixture({mp4:true,av1:true});f.navigate(0,1);
  const firstError=f.video.onerror;
  f.video.plays.at(-1).reject(new DOMException('Unsupported media format','NotSupportedError'));await flush();
- assert.equal(f.video.src,transitionVideo(0,1,'webm'),'an unsupported play promise should try the alternate codec');
+ assert.equal(f.video.src,transitionVideo(0,1,'mp4'),'an unsupported play promise should try the supported alternate codec');
  assert.equal(f.completions,0);firstError();
  assert.equal(f.completions,0,'a duplicate event from the first codec cannot consume the alternate attempt');
  f.video.present(.4);assert.equal(f.progress.at(-1),transitionProgress(400,0));
  f.video.plays.at(-1).reject(new DOMException('Alternate codec unsupported','NotSupportedError'));await flush();
  assert.equal(f.completions,1);assert.equal(f.still.src,stationImage(1));f.player.destroy();
 
- const g=fixture();g.navigate(0,1);
+ const g=fixture({mp4:true,av1:true});g.navigate(0,1);
  g.video.plays.at(-1).reject(new DOMException('Unsupported media format','NotSupportedError'));g.video.onerror();await flush();
- assert.equal(g.video.src,transitionVideo(0,1,'webm'));assert.equal(g.completions,0,'an error event before rejection handling must not retry twice');
+ assert.equal(g.video.src,transitionVideo(0,1,'mp4'));assert.equal(g.completions,0,'an error event before rejection handling must not retry twice');
  g.video.onended();await flush();assert.equal(g.completions,1);g.player.destroy();
 }
 // Updating a picture URL does not mean that its new image can be painted yet.
@@ -340,9 +340,37 @@ function fixture(options){
   // Streaming responses retain their actual MIME type, including servers that
   // omit Content-Type for WebM, rather than silently labelling every Blob MP4.
   globalThis.fetch=async()=>({ok:true,headers:{get:()=>null},body:{getReader(){let sent=false;return {async read(){if(sent)return {done:true};sent=true;return {done:false,value:new Uint8Array([1,2,3])};}};}}});
-  const streaming=createVideoCache();streaming.configure(['clip.webm'],{preload:false});let streamed=false;
-  streaming.request('clip.webm',()=>streamed=true,()=>assert.fail('stream download failed'));await settle();assert.equal(streamed,true);assert.equal(created.at(-1).blob.type,'video/webm');streaming.destroy();await settle();
+  const streaming=createVideoCache();streaming.configure(['clip.webm?v=test'],{preload:false});let streamed=false;
+  streaming.request('clip.webm?v=test',()=>streamed=true,()=>assert.fail('stream download failed'));await settle();assert.equal(streamed,true);assert.equal(created.at(-1).blob.type,'video/webm');streaming.destroy();await settle();
   assert.equal(revoked.length,created.length);assert.equal(new Set(revoked).size,created.length,'every retained Blob URL is eventually revoked exactly once');
  }finally{globalThis.fetch=originalFetch;URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;delete globalThis.matchMedia;navigator.connection.saveData=false;}
 }
-console.log('Prerendered player: decoded-frame clock, complete-clip buffering, serial six-clip preload, priority/deduplication, responsive cache eviction, data saver/reduced motion, cancellation/retry, decoded poster handoffs and playback races passed.');
+// Prefer the actual 10-bit AV1 profile when both codecs are supported, and
+// keep H.264 available for a browser that advertises AV1 but fails to decode it.
+{
+ const f=fixture({mp4:true,av1:true});f.navigate(0,1);
+ assert.equal(f.video.src,transitionVideo(0,1,'webm'));
+ f.video.onerror();assert.equal(f.video.src,transitionVideo(0,1,'mp4'));
+ f.player.destroy();
+}
+
+// An unsupported alternate must not trigger another complete download or a
+// speculative six-file preload after the only supported codec fails.
+for(const options of [{mp4:true,av1:false},{mp4:false,av1:true}]){
+ const configurations=[],requests=[];
+ const cache={configure(urls,options){configurations.push({urls,options});},request(url,ready){requests.push(url);ready('blob:'+url);return()=>{};},setHidden(){},destroy(){}};
+ const f=fixture({...options,cache});f.player.showStation(0);f.navigate(0,1);
+ assert.equal(f.video.loads.length,1);f.video.onerror();await flush();
+ assert.equal(f.completions,1);assert.equal(f.still.src,stationImage(1));assert.equal(requests.length,1,'known-unsupported codec is never requested');
+ const extension=options.mp4?'.mp4?':'.webm?';
+ assert.ok(configurations.every(({urls})=>urls.every(url=>url.includes(extension))),'unsupported codec family is never preloaded');
+ f.player.destroy();
+}
+{
+ const configurations=[];
+ const cache={configure(urls,options){configurations.push(options);},request(){assert.fail('no advertised codec should be downloaded');},setHidden(){},destroy(){}};
+ const f=fixture({mp4:false,av1:false,cache});f.player.showStation(0);f.navigate(0,1);
+ assert.equal(f.completions,1);assert.equal(f.video.loads.length,0);assert.equal(f.still.src,stationImage(1));
+ assert.ok(configurations.every(({preload})=>preload===false),'no eager downloads when neither codec is supported');f.player.destroy();
+}
+console.log('Prerendered player: decoded-frame clock, complete-clip buffering, serial six-clip preload, priority/deduplication, responsive cache eviction, data saver/reduced motion, supported-codec retry, cancellation, decoded poster handoffs and playback races passed.');

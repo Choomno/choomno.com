@@ -31,9 +31,12 @@ for(let index=0;index<4;index++){
 for(let leg=0;leg<3;leg++)for(const direction of ['forward','reverse'])for(const portrait of [false,true])for(const format of ['mp4','webm']){
  const name=`transition-${leg}-${direction}${portrait?'-portrait':''}.${format}`;
  await verify(name);
- const probe=spawnSync('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=width,height,r_frame_rate,nb_frames:format=duration','-of','json',fileURLToPath(new URL('media/'+name,base))],{encoding:'utf8'});
+ const probe=spawnSync('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=codec_name,pix_fmt,level,width,height,r_frame_rate,nb_frames:format=duration','-of','json',fileURLToPath(new URL('media/'+name,base))],{encoding:'utf8'});
  assert.equal(probe.status,0,probe.stderr);
  const info=JSON.parse(probe.stdout),stream=info.streams[0];
+ assert.equal(stream.codec_name,format==='webm'?'av1':'h264');
+ assert.equal(stream.pix_fmt,format==='webm'?'yuv420p10le':'yuv420p');
+ if(format==='mp4')assert.equal(stream.level,portrait?32:42,'H.264 fallback must remain compatible with older decoders');
  assert.equal(stream.height,manifest.height);assert.equal(stream.width,portrait?manifest.height*portraitAspect:manifest.width);
  assert.equal(stream.r_frame_rate,`${manifest.fps}/1`);
  if(stream.nb_frames)assert.equal(Number(stream.nb_frames),manifest.frameCount);

@@ -4,7 +4,7 @@ import {createVideoCache} from './video-cache.js';
 export {masterAspect} from './media-settings.js';
 
 export const stationImage=(index,portrait=false)=>`./media/station-${index}${portrait?'-portrait':''}.webp`;
-export const transitionVideo=(leg,direction,format,portrait=false)=>`./media/transition-${leg}-${direction>0?'forward':'reverse'}${portrait?'-portrait':''}.${format}`;
+export const transitionVideo=(leg,direction,format,portrait=false)=>`./media/transition-${leg}-${direction>0?'forward':'reverse'}${portrait?'-portrait':''}.${format}?v=av1-4m-1`;
 
 // The decoded video frame is the clock for both text and section progress.
 // A slow decoder or a stalled download therefore cannot leave the text ahead.
@@ -12,14 +12,15 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
  let cancelCurrent=null,playing=false,hidden=false;
  video.muted=true;video.playsInline=true;video.loop=false;
  video.preload=navigator.connection?.saveData?'metadata':'auto';
- let preferred=video.canPlayType('video/mp4; codecs="avc1.42E029"')?'mp4':'webm';
+ const supported={webm:!!video.canPlayType('video/webm; codecs="av01.0.09M.10"'),mp4:!!video.canPlayType('video/mp4; codecs="avc1.42E029"')};
+ let preferred=supported.webm?'webm':'mp4';
  let shown=-1,readyPoster='',posterGeneration=0,posterTimer=0;
  const portraitViewport=()=>typeof innerWidth==='number'&&typeof innerHeight==='number'&&innerWidth/innerHeight<=portraitAspect;
  const allowPreload=()=>!navigator.connection?.saveData&&!(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches);
  function configureCache(portrait=portraitViewport(),preload=allowPreload()){
   const urls=[];for(let leg=0;leg<3;leg++)urls.push(transitionVideo(leg,1,preferred,portrait));
   for(let leg=2;leg>=0;leg--)urls.push(transitionVideo(leg,-1,preferred,portrait));
-  cache.configure(urls,{preload});
+  cache.configure(urls,{preload:preload&&supported[preferred]});
  }
  function cancelPoster(){++posterGeneration;clearTimeout(posterTimer);posterTimer=0;}
  function showStill(index,onReady=()=>{}){
@@ -100,10 +101,12 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
   }
   function retry(id){
    if(cancelled||id!==legId)return;
-   if(attempt++===0){preferred=preferred==='mp4'?'webm':'mp4';startLeg();}else fallback();
+   const alternate=preferred==='mp4'?'webm':'mp4';
+   if(attempt++===0&&supported[alternate]){preferred=alternate;startLeg();}else fallback();
   }
   function startLeg(){
    if(cancelled)return;
+   if(!supported[preferred]){fallback();return;}
    playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;lastTime=-1;clearFrames();pause();
    const id=legId;
    const leg=Math.min(current,current+direction),format=preferred;

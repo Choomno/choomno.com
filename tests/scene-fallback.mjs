@@ -35,7 +35,7 @@ if(!scenario){
  }
  class Video extends Target {
   constructor(){super('video');this.frames=new Map();this.sources=[];this.currentTime=0;this.readyState=4;this.paused=true;this.hidden=true;this.playCalls=0;}
-  canPlayType(type){return type.startsWith('video/mp4')?'probably':'';}
+  canPlayType(type){return type.startsWith('video/mp4')||scenario==='media-failure'&&type.startsWith('video/webm')?'probably':'';}
   load(){this.sources.push(this.src);this.currentTime=0;}
   play(){++this.playCalls;this.paused=false;return scenario==='autoplay-rejection'?Promise.reject(new Error('Autoplay blocked')):Promise.resolve();}
   pause(){this.paused=true;}
@@ -121,9 +121,9 @@ if(!scenario){
   assert.equal(still.src,'./media/station-0.webp');
   if(scenario==='media-clock'){
    const initial=copies[0].style.transform;emit(next,'click');await flush();
-   assert.match(video.src,/transition-0-forward\.mp4$/);assert.equal(video.hidden,true,'a station poster remains until the first presented frame');
+   assert.match(video.src,/transition-0-forward\.mp4\?v=av1-4m-1$/);assert.equal(video.hidden,true,'a station poster remains until the first presented frame');
    assert.ok(video.src.startsWith('blob:'),'the application plays a complete downloaded file');
-   assert.ok(downloaded.includes('./media/transition-0-forward.mp4'));
+   assert.ok(downloaded.includes('./media/transition-0-forward.mp4?v=av1-4m-1'));
    advance(1000);assert.equal(copies[0].style.transform,initial,'elapsed wall time cannot move text before decoded frames');
    video.present(.4);assert.equal(video.hidden,false);
    assert.equal(copies[0].style.transform,expectedTransform(0,transitionProgress(400,0)),'text uses the exact presented media timestamp');
@@ -132,12 +132,12 @@ if(!scenario){
    copies.filter(copy=>copy.style.visibility==='hidden').forEach(copy=>assert.equal(copy.style.willChange,'auto'));
    const frameTransform=copies[0].style.transform;advance(2000);assert.equal(copies[0].style.transform,frameTransform,'a stalled video freezes the text at the same pose');
    video.present(7.95);endLeg();visible(1);assert.equal(still.src,'./media/station-1.webp');assert.equal(video.hidden,true);
-   emit(previous,'click');await flush();assert.match(video.src,/transition-0-reverse\.mp4$/);
+   emit(previous,'click');await flush();assert.match(video.src,/transition-0-reverse\.mp4\?v=av1-4m-1$/);
    video.present(.4);assert.equal(copies[1].style.transform,expectedTransform(1,1-transitionProgress(400,0)),'reverse playback drives the reverse camera route');
    endLeg();visible(0);
    emit(win,'keydown',{key:'End'});await flush();
    for(let leg=0;leg<3;leg++){
-    assert.match(video.src,new RegExp(`transition-${leg}-forward\\.mp4$`));
+    assert.match(video.src,new RegExp(`transition-${leg}-forward\\.mp4\\?v=av1-4m-1$`));
     video.present(.4);endLeg();await flush();visible(leg+1);
     assert.equal(next.disabled,true,'multi-leg navigation stays locked through its intermediate stations');
    }
@@ -148,7 +148,7 @@ if(!scenario){
    assert.equal(next.disabled,false,'autoplay denial cannot strand navigation in a busy state');
    emit(next,'click');await flush();visible(2);
   }else if(scenario==='media-failure'){
-   emit(next,'click');await flush();video.onerror();await flush();assert.match(video.src,/transition-0-forward\.webm$/,'a decode error tries the alternate format');
+   emit(next,'click');await flush();video.onerror();await flush();assert.match(video.src,/transition-0-forward\.mp4\?v=av1-4m-1$/,'an AV1 decode error tries the supported H.264 format');
    video.onerror();visible(1);assert.equal(video.hidden,true);assert.equal(next.disabled,false);
    assert.equal(still.src,'./media/station-1.webp','both codec failures retain the requested text and station still');
    emit(next,'click');await flush();video.present(4);

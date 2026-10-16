@@ -43,9 +43,15 @@ rounding in the earlier float32 face traversal.
 video frame's `mediaTime`, using [`requestVideoFrameCallback`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback). A stalled or
 dropped frame therefore cannot advance text ahead of the displayed camera.
 Older browsers use the media element's playback time. There is no continuous
-application rendering loop while a reading station is at rest. MP4 and WebM
-provide alternative encodings (H.264/x264 CRF 18 and VP9 CRF 21); blocked playback, codec failures, or a long
-stall settle on the destination poster with functional text and navigation.
+application rendering loop while a reading station is at rest. WebM carries
+10-bit AV1, preferred when the browser advertises Main-profile level 4.1
+10-bit decoding (`av01.0.09M.10`). MP4 provides an H.264 fallback. Both use
+two-pass encoding at 4 Mbps for landscape and 1.5 Mbps for portrait, with up
+to eight seconds between keyframes. AV1 uses libaom CPU 4; H.264 uses x264's
+veryslow preset and extra bit allocation at both ends of each transition.
+Blocked playback, codec failures, or a long stall settle on the destination
+poster with functional text and navigation. Versioned video URLs prevent
+cached VP9 or older high-bitrate H.264 files from being reused.
 
 After the opening poster is decoded, `video-cache.js` fetches the six clips
 for the current aspect ratio and supported codec, one at a time. Navigation

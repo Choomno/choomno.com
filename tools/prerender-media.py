@@ -1,7 +1,7 @@
 """Render site media from an exported scene and encode forward/reverse clips.
 
 Requirements: Node.js, Python with Pillow, system EGL/OpenGL 4.5 (Mesa), and FFmpeg
-with libx264 and libvpx-vp9. No browser or display server is needed. Raw frames
+with libx264 and libaom-av1. No browser or display server is needed. Raw frames
 stay outside the served repository. LP_NUM_THREADS limits Mesa worker threads.
 
   node --experimental-default-type=module tools/prerender-scene.mjs /tmp/site-render
@@ -20,6 +20,7 @@ rendered at 2880x1440 and Lanczos-downsampled. Each eight-second route contains
 center crops with the same vertical field of view.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import importlib.util
 import json
@@ -51,24 +52,55 @@ def crop_portrait(image):
 
 
 def encode(source, output, fps, codec, frame_count, *, ffmpeg='ffmpeg',
-           threads=2, portrait=False, width=1920, height=960):
-    filters = ['format=yuv420p']
+           threads=4, portrait=False, width=1920, height=960):
+    # Two-pass allocation preserves the intricate endpoint views at modest size.
+    rate = 1_500_000 if portrait else 4_000_000
+    filters = ['format=' + ('yuv420p' if codec == 'mp4' else 'yuv420p10le')]
     if portrait:
         cropped_width = portrait_width(height)
         filters.insert(0, f'crop={cropped_width}:{height}:{(width-cropped_width)//2}:0')
+    record = dict(version=3 if codec == 'mp4' else 2, codec=codec, rate=rate, fps=fps, frames=frame_count,
+                  portrait=portrait, width=width, height=height)
+    # Store provenance beside raw frames, outside the served website. Completed
+    # files are reused only when settings AND their content digest still match.
+    cache = source.parent.parent / 'encoding-cache'
+    cache.mkdir(exist_ok=True)
+    provenance = cache / (output.name + '.json')
+    record['sourceSha256'] = hashlib.sha256(b''.join(
+        hashlib.sha256((source / f'{i:04d}.png').read_bytes()).digest()
+        for i in range(frame_count))).hexdigest()
+    if output.exists() and provenance.exists():
+        previous = json.loads(provenance.read_text())
+        if previous.get('settings') == record and previous.get('sha256') == hashlib.sha256(output.read_bytes()).hexdigest():
+            print(f'Reusing {output.name}', flush=True)
+            return
     common = [ffmpeg, '-hide_banner', '-loglevel', 'warning', '-y',
               '-framerate', str(fps), '-i', str(source / '%04d.png'), '-an',
               '-frames:v', str(frame_count), '-vf', ','.join(filters),
-              '-threads', str(threads)]
-    if codec == 'mp4':
-        options = ['-c:v', 'libx264', '-crf', '18', '-preset', 'slow',
-                   '-g', str(fps), '-profile:v', 'high', '-movflags', '+faststart']
-    else:
-        options = ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '21',
-                   '-deadline', 'good', '-cpu-used', '3', '-row-mt', '1', '-g', str(fps)]
+              '-threads', str(threads), '-b:v', str(rate), '-g', str(frame_count-1),
+              '-passlogfile', str(cache / output.name)]
     temporary = output.with_name('.' + output.stem + '.partial' + output.suffix)
-    subprocess.run(common + options + [str(temporary)], check=True)
+    with (cache / (output.name + '.log')).open('w') as log:
+        for pass_number in [1, 2]:
+            if codec == 'mp4':
+                margin = round(1.5 * fps)
+                zones = f'0,{margin},b=2.5/{frame_count-1-margin},{frame_count-1},b=2.5'
+                options = ['-c:v', 'libx264', '-preset', 'veryslow',
+                           '-profile:v', 'high', '-refs', '4', '-level:v', '3.2' if portrait else '4.2', '-maxrate', str(rate*2),
+                           '-bufsize', str(rate*2), '-sc_threshold', '0',
+                           '-x264-params', 'zones=' + zones]
+            else:
+                options = ['-c:v', 'libaom-av1', '-cpu-used', '6' if pass_number == 1 else '4',
+                           '-row-mt', '1', '-tiles', '2x1', '-lag-in-frames', '35']
+            destination = ['-f', 'null', '/dev/null'] if pass_number == 1 else (
+                ['-movflags', '+faststart', str(temporary)] if codec == 'mp4' else [str(temporary)])
+            print(f'{output.name}: pass {pass_number}', flush=True)
+            subprocess.run(common + options + ['-pass', str(pass_number)] + destination,
+                           stdout=log, stderr=log, check=True)
     temporary.replace(output)
+    provenance.write_text(json.dumps({'settings': record,
+        'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}, indent=2) + '\n')
+    print(f'{output.name}: {output.stat().st_size/1e6:.2f} MB', flush=True)
 
 
 def encode_leg(work, output, scene, leg, *, ffmpeg='ffmpeg', threads=2,
@@ -85,14 +117,20 @@ def encode_leg(work, output, scene, leg, *, ffmpeg='ffmpeg', threads=2,
         original = directory / f'{len(frames)-1-i:04d}.png'
         target.unlink(missing_ok=True)
         os.link(original, target)
+    jobs = []
     for direction, source in [('forward', directory), ('reverse', reverse)]:
         for portrait in [False, True]:
             suffix = '-portrait' if portrait else ''
             for codec in ['mp4', 'webm']:
                 path = output / f'transition-{leg}-{direction}{suffix}.{codec}'
                 print(f'Encoding {path.name}', flush=True)
-                encode(source, path, scene['fps'], codec, len(frames), ffmpeg=ffmpeg,
-                       threads=threads, portrait=portrait, width=width, height=height)
+                jobs.append((source, path, codec, portrait))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(encode, source, path, scene['fps'], codec, len(frames),
+                   ffmpeg=ffmpeg, threads=threads, portrait=portrait, width=width, height=height)
+                   for source, path, codec, portrait in jobs]
+        for future in futures:
+            future.result()
 
 
 def write_manifest(work, output, scene, settings, ffmpeg):
@@ -119,9 +157,15 @@ def write_manifest(work, output, scene, settings, ffmpeg):
         'resampling': 'Lanczos', 'stillWidth': settings['still_width'],
         'stillHeight': settings['still_height'], 'stillMaxSteps': settings['still_steps'],
         'sourceHashes': scene['sourceHashes'],
-        'encoding': {'mp4': {'encoder': 'libx264', 'crf': 18, 'preset': 'slow'},
-                     'webm': {'encoder': 'libvpx-vp9', 'crf': 21, 'cpuUsed': 3},
-                     'pixelFormat': 'yuv420p', 'keyframeInterval': scene['fps'],
+        'encoding': {'mp4': {'encoder': 'libx264', 'passes': 2, 'preset': 'veryslow',
+                                  'pixelFormat': 'yuv420p', 'references': 4,
+                                  'landscapeLevel': '4.2', 'portraitLevel': '3.2', 'endpointSeconds': 1.5,
+                                  'endpointBitrateFactor': 2.5, 'maxrateFactor': 2},
+                     'webm': {'encoder': 'libaom-av1', 'passes': 2, 'cpuUsed': 4,
+                              'firstPassCpuUsed': 6, 'pixelFormat': 'yuv420p10le',
+                              'rowMt': 1, 'tiles': '2x1', 'lagInFrames': 35},
+                     'landscapeBitrate': 4_000_000, 'portraitBitrate': 1_500_000,
+                     'keyframeInterval': scene['intervals'],
                      'ffmpegVersion': subprocess.check_output(
                          [ffmpeg, '-version'], text=True).splitlines()[0]},
         'stations': [{'index': i, 'image': f'station-{i}.webp',
@@ -163,7 +207,7 @@ def main():
     parser.add_argument('--skip-encode', action='store_true')
     parser.add_argument('--encode-only', action='store_true')
     parser.add_argument('--ffmpeg', default=os.environ.get('FFMPEG_BINARY', 'ffmpeg'))
-    parser.add_argument('--threads', type=int, default=2)
+    parser.add_argument('--threads', type=int, default=4)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     scene = json.loads((args.work / 'scene.json').read_text())
