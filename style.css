@@ -35,3 +35,6 @@ header,footer{text-shadow:0 1px 4px #000}
 
 /* The name retains a circular disk; subsequent sections use ellipses. */
 .intro .reading-copy::before{inset:auto;left:50%;top:50%;width:calc(100% + 180px);height:auto;aspect-ratio:1;transform:translate(-50%,-50%);background:radial-gradient(circle closest-side,#0b0d0bfa 0%,#0b0d0be8 40%,#0b0d0bb8 60%,#0b0d0b60 78%,#0b0d0b18 91%,transparent 100%)}
+
+/* Size middle-section ellipses from the complete text footprint. */
+.personal-section:not(.elsewhere) .reading-copy::before{inset:auto;left:50%;top:50%;width:calc(141.5% + 80px);height:calc(141.5% + 80px);transform:translate(-50%,-50%)}
