@@ -12,19 +12,11 @@ export function advance(frame,tet,step,data,ideal){
  }
  throw Error('Camera traversal exceeded 64 faces');
 }
-// An elliptic rotation fixing the observer and the chosen ideal endpoint.
-// The endpoint is transported through face pairings together with the camera.
-export function idealRotation(frame,ideal,angle){
- const q=[1,2,3].map(j=>dot(frame.map(row=>row[j]),ideal));
- const length=Math.hypot(...q),n=q.map(x=>x/length);
- const c=Math.cos(angle),s=Math.sin(angle),v=1-c;
- const [x,y,z]=n;
- const r=[
-  [c+x*x*v,x*y*v-z*s,x*z*v+y*s],
-  [y*x*v+z*s,c+y*y*v,y*z*v-x*s],
-  [z*x*v-y*s,z*y*v+x*s,c+z*z*v]
- ];
- return [[1,0,0,0],...r.map(row=>[0,...row])];
+// A circular path on the horosphere t-z=1, aimed at U=(1,0,0,1).
+// Parabolic translations fix U; their forward camera column is U-position.
+export function cuspOrbit(angle,radius=.55){
+ const a=radius*Math.cos(angle),b=radius*Math.sin(angle),s=radius*radius/2;
+ return [[1+s,a,b,-s],[a,1,0,-a],[b,0,1,-b],[s,a,b,1-s]];
 }
 export function beamData(data){
  const classes=[...new Set(data.vertexClasses.filter((_,i)=>data.ideal[i]))].sort();

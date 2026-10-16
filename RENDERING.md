@@ -44,10 +44,20 @@ For a face normal n, its intersection parameter is
     tanh(s) = −⟨p,n⟩ / ⟨v,n⟩.
 
 Both point and tangent are transformed by the exact face pairing and tracing
-continues in the paired cell. Camera motion uses these same identifications. Automatic motion rotates about the
-geodesic from the observer toward a fixed ideal endpoint. It fixes the camera
-position and keeps that point at infinity stationary in the image. The endpoint
-is transported through face pairings during manual travel.
+continues in the paired cell. Camera motion uses these same identifications. Automatic motion follows a circle on the horosphere t−z=1, keeping the ideal
+point U=(1,0,0,1) at the center of the image. For a=R cos θ, b=R sin θ and
+s=R²/2, the camera frame is the parabolic isometry
+
+    [1+s  a  b  -s  ]
+    [a    1  0  -a  ]
+    [b    0  1  -b  ]
+    [s    a  b  1-s ]
+
+It fixes U, and its forward column equals U minus the position column. The
+camera therefore moves along a horospherical circle with radius R=0.55 while
+looking directly toward U, without rolling the image. The whole default path
+lies within the fundamental domain. Manual navigation pauses the orbit;
+Resume orbit restores the centered circular view.
 
 For each edge, normalize its finite endpoint a, scale its null endpoint u so
 ⟨a,u⟩=−1, and set t=u−a. A tube of hyperbolic radius r around that geodesic ray

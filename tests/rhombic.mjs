@@ -1,7 +1,7 @@
 // Independent distance-parameter checks for the complete rhombic-cell renderer.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {identity,advance,rotation,translation,multiply,beamData,idealRotation} from '../rhombic.js';
+import {identity,advance,rotation,translation,multiply,beamData,cuspOrbit} from '../rhombic.js';
 const data=JSON.parse(await readFile(new URL('../rhombic-data.json',import.meta.url),'utf8'));
 const dot=(a,b)=>a.reduce((s,x,i)=>s+(i===0?-1:1)*x*b[i],0);
 const scale=(a,c)=>a.map(x=>x*c),add=(a,b)=>a.map((x,i)=>x+b[i]);
@@ -56,27 +56,19 @@ for(const {a,t} of beams)for(const s0 of [.1,.5,1.2]){
 }
 console.log(`Rhombic checks passed: ${crossings} camera crossings; ${intersectionChecks} independent tube intersections; negative ray extensions excluded.`);
 
-// Automatic rotation fixes the observer and the ideal point's celestial direction.
-const sky=(f,u)=>{
- const q=[-dot(f.map(r=>r[0]),u),...[1,2,3].map(j=>dot(f.map(r=>r[j]),u))];
- return q.slice(1).map(x=>x/q[0]);
-};
-let orbitFrame=multiply(rotation(1,3,.24),rotation(2,3,.17)),ideal=[1,0,0,1];
-const anchor=sky(orbitFrame,ideal),eye=orbitFrame.map(r=>r[0]);
-for(let i=0;i<2000;i++){
- const step=idealRotation(orbitFrame,ideal,.007);
- ({frame:orbitFrame,ideal}=advance(orbitFrame,0,step,data,ideal));
- sky(orbitFrame,ideal).forEach((v,j)=>close(v,anchor[j],1e-10));
- orbitFrame.map(r=>r[0]).forEach((v,j)=>close(v,eye[j],1e-10));
+// The camera circles on a horosphere, with the ideal endpoint at screen center.
+const U=[1,0,0,1],R=.55;
+for(let i=0;i<=720;i++){
+ const f=cuspOrbit(i*Math.PI/360,R),p=f.map(r=>r[0]),forward=f.map(r=>r[3]);
+ close(p[1]*p[1]+p[2]*p[2],R*R,1e-12);
+ close(p[0]-p[3],1,1e-12);
+ const target=map(f,U);target.forEach((v,j)=>close(v,U[j],1e-12));
+ forward.forEach((v,j)=>close(v,U[j]-p[j],1e-12));
+ for(let j=1;j<=2;j++)close(dot(f.map(r=>r[j]),U),0,1e-12);
+ for(let j=0;j<4;j++)for(let k=0;k<4;k++)close(dot(f.map(r=>r[j]),f.map(r=>r[k])),j===k?(j===0?-1:1):0,1e-12);
+ for(const n of data.planes)assert.ok(dot(p,n)<0);
 }
-// Transport the same ideal endpoint across quotient identifications during travel.
-let transported=0;
-for(let i=0;i<400;i++){
- const step=multiply(rotation(1,3,.023),translation(.07));
- const raw=multiply(orbitFrame,step),before=sky(raw,ideal);
- transported+=+data.planes.some(n=>dot(raw.map(r=>r[0]),n)>1e-8);
- ({frame:orbitFrame,ideal}=advance(orbitFrame,0,step,data,ideal));
- sky(orbitFrame,ideal).forEach((v,j)=>close(v,before[j],1e-8));
-}
-assert.ok(transported>10);
-console.log(`Ideal-point rotation passed: stationary eye and sky anchor over 2000 frames; endpoint transported across ${transported} face crossings.`);
+const start=cuspOrbit(0),end=cuspOrbit(2*Math.PI);
+start.flat().forEach((v,i)=>close(v,end.flat()[i],1e-12));
+assert.ok(Math.hypot(...start.map((r,i)=>r[0]-cuspOrbit(Math.PI)[i][0]))>1);
+console.log('Centered orbit passed: full circular camera path, constant horosphere, ideal endpoint fixed at screen center, no roll, Lorentz frames.');
