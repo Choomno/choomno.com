@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createPrerenderedPlayer,stationImage,transitionVideo} from '../prerendered.js';
 import {transitionDuration,transitionProgress} from '../transition-timing.js';
-import {portraitAspect} from '../media-settings.js';
+import {portraitAspect,videoFramesPerSecond} from '../media-settings.js';
 import {createVideoCache} from '../video-cache.js';
 
 let now=0,nextId=0,rafs=new Map(),timers=new Map();
@@ -34,9 +34,9 @@ class Video {
  }
  requestVideoFrameCallback(fn){const id=++nextId;this.frames.set(id,fn);return id;}
  cancelVideoFrameCallback(id){this.frames.delete(id);}
- present(seconds){
+ present(seconds,{expectedDisplayTime=now}={}){
   const [id,fn]=this.frames.entries().next().value??[];assert.ok(fn,'a decoded frame must have a subscriber');
-  this.frames.delete(id);fn(now,{mediaTime:seconds});
+  this.frames.delete(id);fn(now,{mediaTime:seconds,expectedDisplayTime});
  }
 }
 function fixture(options){
@@ -60,7 +60,8 @@ function fixture(options){
  f.video.currentTime=5;f.video.present(.4);
  assert.equal(f.progress.at(-1),transitionProgress(400,0),'the presented PTS wins over currentTime');
  assert.equal(f.video.hidden,false);
- const count=f.progress.length;advance(2000);assert.equal(f.progress.length,count,'stalled media never receives extrapolated progress');
+ advance(2000);assert.equal(f.progress.at(-1),transitionProgress(1000*(.4+1/videoFramesPerSecond),0),'stall extrapolation is bounded by one video frame');
+ const count=f.progress.length;advance(2000);assert.equal(f.progress.length,count,'a stalled clock stops after that bounded interval');
  f.video.present(4.3);assert.equal(f.progress.at(-1),transitionProgress(4300,0));
  const oldFrame=[...f.video.frames.values()][0],oldEnded=f.video.onended;f.video.onended();
  assert.equal(f.progress.at(-1),1);assert.equal(f.still.src,stationImage(1));assert.equal(f.video.src,transitionVideo(1,1,'mp4'));
@@ -72,6 +73,36 @@ function fixture(options){
  assert.equal(f.progress.at(-1),3);assert.equal(f.completions,1);assert.equal(f.player.playing,false);
  assert.equal(f.video.hidden,true);assert.equal(f.still.src,stationImage(3),'the endpoint is exact even if the last encoded frame precedes it');
  await flush();assert.equal(f.completions,1);f.player.destroy();
+}
+
+// Text moves at display refresh between presented video frames, using the
+// expected display instant rather than callback delivery time as its anchor.
+{
+ const f=fixture();f.navigate(0,1);advance(100);assert.deepEqual(f.progress,[]);
+ f.video.present(.4,{expectedDisplayTime:now+8});const startCount=f.progress.length;
+ advance(4);assert.equal(f.progress.length,startCount,'a future display anchor does not advance text early');
+ advance(8);assert.ok(Math.abs(f.progress.at(-1)-transitionProgress(404,0))<1e-12,'text advances by four milliseconds between video frames');
+ advance(4);assert.ok(Math.abs(f.progress.at(-1)-transitionProgress(408,0))<1e-12);
+ advance(100);assert.equal(f.progress.at(-1),transitionProgress((.4+1/videoFramesPerSecond)*1000,0));
+ const bounded=f.progress.at(-1),count=f.progress.length;advance(500);assert.equal(f.progress.length,count);assert.equal(f.progress.at(-1),bounded);
+ f.video.present(1);advance(4);const moving=f.progress.at(-1);assert.ok(moving>transitionProgress(1000,0));
+ f.video.onwaiting();advance(100);assert.equal(f.progress.at(-1),moving,'waiting freezes interpolation immediately');
+ f.video.onplaying();advance(100);assert.equal(f.progress.at(-1),moving,'playing alone cannot invent a new presented-frame anchor');
+ f.video.present(1.1);advance(4);const ahead=f.progress.at(-1);
+ f.video.present(1.1);assert.equal(f.progress.at(-1),ahead,'a fresh timing anchor cannot correct the text backwards');
+ advance(2);assert.equal(f.progress.at(-1),ahead);advance(4);assert.ok(f.progress.at(-1)>ahead,'the next anchor catches up without reversing');
+ f.video.paused=true;f.video.onpause();const paused=f.progress.at(-1);advance(13000);assert.equal(f.progress.at(-1),paused);assert.equal(f.completions,0,'a deliberate pause suspends the frame-stall timeout');
+ f.video.paused=false;f.video.onplaying();advance(100);assert.equal(f.progress.at(-1),paused);
+ f.video.present(1.2);advance(4);const visible=f.progress.at(-1);f.player.setHidden(true);advance(1000);assert.equal(f.progress.at(-1),visible);
+ f.player.setHidden(false);advance(100);assert.equal(f.progress.at(-1),visible,'visibility resume awaits the next actual video presentation');
+ f.video.present(1.3);const lateDisplay=[...rafs.values()][0],lateFrame=[...f.video.frames.values()][0];
+ const beforeCancel=f.progress.length;f.player.freeze();lateDisplay(now+8);lateFrame(now,{mediaTime:2,expectedDisplayTime:now});advance(100);
+ assert.equal(f.progress.length,beforeCancel,'canceled display and media callbacks cannot resume text');f.player.destroy();await flush();
+}
+{
+ const f=fixture();f.navigate(0,1);f.video.present(.4);advance(12016);
+ assert.equal(f.completions,1,'display-refresh updates never extend the actual-frame stall watchdog');
+ assert.equal(f.still.src,stationImage(1));f.player.destroy();await flush();
 }
 
 // Reverse clips have positive playback time and the opposite route orientation.
@@ -373,4 +404,4 @@ for(const options of [{mp4:true,av1:false},{mp4:false,av1:true}]){
  assert.equal(f.completions,1);assert.equal(f.video.loads.length,0);assert.equal(f.still.src,stationImage(1));
  assert.ok(configurations.every(({preload})=>preload===false),'no eager downloads when neither codec is supported');f.player.destroy();
 }
-console.log('Prerendered player: decoded-frame clock, complete-clip buffering, serial six-clip preload, priority/deduplication, responsive cache eviction, data saver/reduced motion, supported-codec retry, cancellation, decoded poster handoffs and playback races passed.');
+console.log('Prerendered player: display-refresh text, bounded presented-frame interpolation, complete-clip buffering, serial six-clip preload, priority/deduplication, responsive cache eviction, data saver/reduced motion, supported-codec retry, cancellation, decoded poster handoffs and playback races passed.');

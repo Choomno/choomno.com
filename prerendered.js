@@ -1,13 +1,13 @@
 import {transitionProgress,transitionDuration} from './transition-timing.js';
-import {portraitAspect} from './media-settings.js';
+import {portraitAspect,videoFramesPerSecond} from './media-settings.js';
 import {createVideoCache} from './video-cache.js';
 export {masterAspect} from './media-settings.js';
 
 export const stationImage=(index,portrait=false)=>`./media/station-${index}${portrait?'-portrait':''}.webp`;
 export const transitionVideo=(leg,direction,format,portrait=false)=>`./media/transition-${leg}-${direction>0?'forward':'reverse'}${portrait?'-portrait':''}.${format}?v=av1-4m-1`;
 
-// The decoded video frame is the clock for both text and section progress.
-// A slow decoder or a stalled download therefore cannot leave the text ahead.
+// Presented frames anchor the text clock. Display-refresh interpolation is
+// limited to one encoded frame, so a stall cannot let text run away from video.
 export function createPrerenderedPlayer({still,video,portraitSource,cache=createVideoCache()}){
  let cancelCurrent=null,playing=false,hidden=false;
  video.muted=true;video.playsInline=true;video.loop=false;
@@ -47,24 +47,25 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
  function showStation(index){cancelCurrent?.();showStill(index,decoded=>{if(decoded)configureCache();});}
  function navigate({from,to,onProgress,onComplete}){
   cancelCurrent?.();
-  let cancelled=false,playbackReady=false,frame=0,raf=0,watchdog=0,current=from,attempt=0,playId=0,legId=0,lastTime=-1,cancelDownload=null;
+  let cancelled=false,playbackReady=false,frame=0,raf=0,watchdog=0,current=from,attempt=0,playId=0,legId=0,lastTime=-1,lastFrameTime=-1,anchor=null,cancelDownload=null;
   const direction=Math.sign(to-from);
   const portrait=portraitViewport();
   playing=true;
   function clearFrames(){
    if(frame)video.cancelVideoFrameCallback?.(frame);
-   cancelAnimationFrame(raf);clearTimeout(watchdog);frame=raf=watchdog=0;
+   cancelAnimationFrame(raf);clearTimeout(watchdog);frame=raf=watchdog=0;anchor=null;
   }
-  function pause(){++playId;video.pause();}
+  function stopTextClock(){anchor=null;cancelAnimationFrame(raf);raf=0;}
+  function pause(){++playId;stopTextClock();video.pause();}
   function cancel(){
    if(cancelled)return;
-   cancelled=true;playbackReady=false;cancelDownload?.();cancelDownload=null;clearFrames();cancelPoster();video.onended=video.onerror=video.onwaiting=video.onplaying=null;pause();
+   cancelled=true;playbackReady=false;cancelDownload?.();cancelDownload=null;clearFrames();cancelPoster();video.onended=video.onerror=video.onwaiting=video.onplaying=video.onpause=null;pause();
    playing=false;if(cancelCurrent===cancel)cancelCurrent=null;
   }
   cancelCurrent=cancel;
   function fallback(){
    if(cancelled)return;
-   playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;clearFrames();pause();video.onended=video.onerror=video.onwaiting=video.onplaying=null;
+   playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;clearFrames();pause();video.onended=video.onerror=video.onwaiting=video.onplaying=video.onpause=null;
    showStill(to,()=>{if(cancelled)return;cancel();onProgress(to);onComplete();});
   }
   function guardDownload(){
@@ -72,19 +73,37 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
    if(!hidden)watchdog=setTimeout(fallback,12000);
   }
   function report(seconds){
-   if(cancelled||seconds===lastTime)return;
+   if(cancelled||seconds<=lastTime)return;
    lastTime=seconds;
-   guardDownload();video.hidden=false;
    const leg=Math.min(current,current+direction);
    const fraction=transitionProgress(Math.min(transitionDuration,Math.max(0,seconds*1000)),leg);
    onProgress(current+direction*fraction);
   }
+  function followDisplay(){
+   if(raf||!anchor||cancelled||hidden||video.paused)return;
+   const id=legId;
+   raf=requestAnimationFrame(timestamp=>{
+    raf=0;if(cancelled||id!==legId||hidden||video.paused||!anchor)return;
+    const elapsed=Math.max(0,(timestamp-anchor.displayTime)/1000)*(video.playbackRate||1);
+    const offset=Math.min(1/videoFramesPerSecond,elapsed);
+    report(anchor.mediaTime+offset);
+    // A missing next video frame stops this loop after one frame of motion.
+    // Only a newly presented frame can extend the interpolation interval.
+    if(offset<1/videoFramesPerSecond)followDisplay();
+   });
+  }
+  function presented(seconds,displayTime){
+   if(cancelled||hidden||video.paused)return;
+   if(seconds!==lastFrameTime){lastFrameTime=seconds;guardDownload();video.hidden=false;}
+   report(seconds);
+   if(video.requestVideoFrameCallback){anchor={mediaTime:seconds,displayTime};followDisplay();}
+  }
   function followFrames(){
    const id=legId;
    if(video.requestVideoFrameCallback){
-    frame=video.requestVideoFrameCallback((_,metadata)=>{if(cancelled||id!==legId)return;frame=0;report(metadata.mediaTime);followFrames();});
+    frame=video.requestVideoFrameCallback((timestamp,metadata)=>{if(cancelled||id!==legId)return;frame=0;presented(metadata.mediaTime,Number.isFinite(metadata.expectedDisplayTime)?metadata.expectedDisplayTime:timestamp);followFrames();});
    }else{
-    const tick=()=>{if(cancelled||id!==legId)return;if(video.readyState>=2&&!video.paused)report(video.currentTime);raf=requestAnimationFrame(tick);};
+    const tick=timestamp=>{if(cancelled||id!==legId)return;if(video.readyState>=2&&!video.paused)presented(video.currentTime,timestamp);raf=requestAnimationFrame(tick);};
     raf=requestAnimationFrame(tick);
    }
   }
@@ -92,6 +111,7 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
    // Returning to a visible tab must not replay the previous clip while the
    // source or destination poster is still being decoded.
    if(hidden||cancelled||!playbackReady)return;
+   if(!video.requestVideoFrameCallback&&!raf)followFrames();
    guardDownload();
    const id=++playId,leg=legId,promise=video.play();
    promise?.catch(error=>{
@@ -107,7 +127,7 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
   function startLeg(){
    if(cancelled)return;
    if(!supported[preferred]){fallback();return;}
-   playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;lastTime=-1;clearFrames();pause();
+   playbackReady=false;cancelDownload?.();cancelDownload=null;++legId;lastTime=lastFrameTime=-1;clearFrames();pause();
    const id=legId;
    const leg=Math.min(current,current+direction),format=preferred;
    showStill(current,decoded=>{
@@ -115,7 +135,9 @@ export function createPrerenderedPlayer({still,video,portraitSource,cache=create
     if(!decoded){fallback();return;}
     // A codec retry restarts at the source poster, so text must restart there too.
     if(attempt>0)onProgress(current);
-    video.onwaiting=guardDownload;video.onplaying=guardDownload;
+    video.onwaiting=()=>{if(cancelled||id!==legId)return;stopTextClock();guardDownload();};
+    video.onplaying=()=>{if(cancelled||id!==legId)return;guardDownload();if(!video.requestVideoFrameCallback&&!raf)followFrames();};
+    video.onpause=()=>{if(cancelled||id!==legId)return;stopTextClock();clearTimeout(watchdog);watchdog=0;};
     video.onerror=()=>retry(id);
     video.onended=()=>{
      if(cancelled||id!==legId)return;

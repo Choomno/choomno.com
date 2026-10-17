@@ -62,7 +62,21 @@ nav.goTo(1);assert.equal(nav.goTo(2),false,'transitions cannot be interrupted by
 advance(transitionDuration/2);assert.ok(Math.abs(scrollY-849.25/2)<1e-9,'the longer transition is only halfway through at 4 seconds');
 advance(transitionDuration/2);assert.equal(scrollY,849.25);
 assert.equal(emit(win,'keydown',{key:'ArrowDown',repeat:true}).defaultPrevented,true);assert.equal(nav.active,1);
-const link=new Target('a');emit(win,'keydown',{key:'PageDown',target:link});assert.equal(nav.active,2,'paging works while a link is focused');advance(transitionDuration);
+const link=new Target('a');
+for(const key of [' ','PageDown','PageUp','Home','End']){
+ assert.equal(emit(win,'keydown',{key,target:link}).defaultPrevented,true,'native scrolling shortcuts are suppressed');
+ assert.equal(nav.active,1,`${key} must not change the section`);
+}
+assert.equal(emit(win,'keydown',{key:'Enter',target:link}).defaultPrevented,false,'links retain keyboard activation');
+const button=new Target('button');
+assert.equal(emit(win,'keydown',{key:' ',target:button}).defaultPrevented,false,'explicit controls retain Space activation');
+assert.equal(emit(win,'keydown',{key:'Tab'}).defaultPrevented,false,'Tab retains accessible focus navigation');
+for(const [key,index] of [['ArrowDown',2],['ArrowUp',1],['ArrowRight',2],['ArrowLeft',1]]){
+ emit(win,'keydown',{key,target:link});assert.equal(nav.active,index,`${key} selects the adjacent section`);advance(transitionDuration);
+}
+emit(doc,'click',{button:0});assert.equal(nav.active,1,'a blank-page mouse click does not advance');
+emit(doc,'click',{button:0,pointerType:'pen'});assert.equal(nav.active,1,'non-touch pointer clicks do not advance');
+emit(win,'wheel',{deltaY:100,deltaX:0});assert.equal(nav.active,2,'wheel navigation remains available');advance(transitionDuration);
 const input=new Target('input');assert.equal(emit(win,'keydown',{key:'Home',target:input}).defaultPrevented,false);assert.equal(nav.active,2);
 assert.equal(emit(win,'wheel',{deltaY:100,deltaX:0,ctrlKey:true}).defaultPrevented,false,'pinch/zoom is not intercepted');
 assert.equal(emit(win,'wheel',{deltaY:40,deltaX:100}).defaultPrevented,true,'diagonal wheel motion cannot scroll the document out of sync');
@@ -71,20 +85,20 @@ geometry[1][0]+=.25;nav.goTo(1,{immediate:true});globalThis.scrollY=849;nav.goTo
 assert.equal(scrollY,1650.125,'pixel rounding at a settled anchor must not create an extra near-stationary leg');
 geometry[1][0]-=.25;
 // Multi-section requests visit every anchor, easing to rest before changing route legs.
-nav.goTo(0,{immediate:true});emit(win,'keydown',{key:'End'});assert.equal(nav.active,3);
+nav.goTo(0,{immediate:true});nav.goTo(3);assert.equal(nav.active,3);
 advance(transitionDuration-10);const before10=scrollY;
 advance(5);const before5=scrollY;
-advance(5);const firstStop=scrollY;assert.equal(firstStop,849.25,'End pauses precisely at the first intermediate anchor');
+advance(5);const firstStop=scrollY;assert.equal(firstStop,849.25,'A multi-section jump pauses precisely at the first intermediate anchor');
 assert.equal(nav.goTo(0),false,'a multi-leg transition remains atomic between legs');
 advance(5);const after5=scrollY;
 advance(5);const after10=scrollY;
 assert.ok(Math.abs(firstStop-before5)/5<.001&&Math.abs(after5-firstStop)/5<.001,'speed vanishes on both sides of an intermediate anchor');
 assert.ok(Math.abs(firstStop-2*before5+before10)/25<.0002&&Math.abs(after10-2*after5+firstStop)/25<.0002,'acceleration vanishes before and after changing route legs');
 assert.ok(before10<before5&&before5<firstStop&&firstStop<after5&&after5<after10,'there is no overshoot or reversal at the stop');
-advance(transitionDuration-10);assert.equal(scrollY,1650.125,'End reaches the next anchor after another full leg');
-advance(transitionDuration);assert.equal(scrollY,2450,'End completes only after all three legs');
-emit(win,'keydown',{key:'Home'});
-for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'Home traverses the same anchors in reverse');}
+advance(transitionDuration-10);assert.equal(scrollY,1650.125,'A multi-section jump reaches the next anchor after another full leg');
+advance(transitionDuration);assert.equal(scrollY,2450,'A multi-section jump completes only after all three legs');
+nav.goTo(0);
+for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'A reverse multi-section jump traverses the same anchors in reverse');}
 const distantLink=new Target('a');distantLink.href='http://localhost/#elsewhere';distantLink.attributes.href='#elsewhere';
 assert.equal(emit(doc,'click',{target:distantLink,button:0}).defaultPrevented,true);
 for(const y of [849.25,1650.125,2450]){advance(transitionDuration);assert.equal(scrollY,y,'an internal link traverses consecutive legs');}
@@ -106,6 +120,12 @@ assert.equal(nav.progress,0,'Rewind immediately restores the calibrated camera p
 advance(16);
 assert.equal(doc.activeElement,ids.name,'Rewind restores keyboard focus to the name');
 nav.goTo(2,{immediate:true});
+
+// Actual touch taps advance, without a synthetic click advancing a second time.
+emit(win,'touchstart',{touches:[{clientX:100,clientY:100}]});
+emit(win,'touchend',{touches:[],changedTouches:[{clientX:100,clientY:100}]});
+assert.equal(nav.active,3,'a blank-page touch tap still advances');advance(transitionDuration);
+nav.goTo(2,{immediate:true});emit(doc,'click',{button:0});assert.equal(nav.active,2,'a delayed synthetic click cannot advance');
 
 // Starting a swipe over a link must not escape into native document scrolling.
 const externalLink=new Target('a');externalLink.href='https://example.com/';externalLink.attributes.href=externalLink.href;

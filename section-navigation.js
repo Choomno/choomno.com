@@ -149,6 +149,10 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
    if(event.cancelable)event.preventDefault();
    ignoreClickUntil=performance.now()+450;
    goTo(active+Math.sign(Math.abs(dy)>=Math.abs(dx)?dy:dx));
+  }else if(!event.target.closest(interactive)&&!getSelection()?.toString()){
+   // Touch taps retain mobile navigation; ordinary mouse clicks do not.
+   ignoreClickUntil=performance.now()+450;
+   goTo(active+1);
   }
  },{passive:false});
  on(window,'touchcancel',()=>{touch=null;multiTouch=false;ignoreClickUntil=performance.now()+450;});
@@ -164,17 +168,16 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
    }
    return;
   }
-  if(event.target.closest(interactive)||getSelection()?.toString())return;
-  goTo(active+1);
  });
  on(window,'keydown',event=>{
   pointerFocusUntil=0;
   if(!isEnabled()||event.defaultPrevented||event.target.closest('button,input,select,textarea,summary,[contenteditable="true"]')||event.altKey||event.ctrlKey||event.metaKey)return;
-  if(event.shiftKey&&event.key!==' ')return;
-  const direction={ArrowDown:1,ArrowRight:1,PageDown:1,' ':event.shiftKey?-1:1,ArrowUp:-1,ArrowLeft:-1,PageUp:-1}[event.key];
-  if(!direction&&event.key!=='Home'&&event.key!=='End')return;
+  const direction={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[event.key];
+  // These native scrolling keys must not move the document behind the camera.
+  if([' ','PageDown','PageUp','Home','End'].includes(event.key)){event.preventDefault();return;}
+  if(!direction||event.shiftKey)return;
   event.preventDefault();if(event.repeat)return;
-  goTo(event.key==='Home'?0:event.key==='End'?sections.length-1:active+direction);
+  goTo(active+direction);
  });
  on(document,'focusin',event=>{
   if(!isEnabled()||performance.now()<pointerFocusUntil)return;

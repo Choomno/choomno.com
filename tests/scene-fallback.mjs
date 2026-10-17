@@ -3,6 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {transitionDuration,textSlideDuration,transitionProgress} from '../transition-timing.js';
 import {projectReadingPlaneWithDepth,readingPhase} from '../projection.js';
+import {videoFramesPerSecond} from '../media-settings.js';
 
 const scenario=process.argv[2];
 if(!scenario){
@@ -130,16 +131,18 @@ if(!scenario){
    assert.match(copies[0].style.transform,/^matrix3d\(/,'moving text retains the full projective plane');
    assert.equal(copies[0].style.willChange,'transform, opacity');
    copies.filter(copy=>copy.style.visibility==='hidden').forEach(copy=>assert.equal(copy.style.willChange,'auto'));
-   const frameTransform=copies[0].style.transform;advance(2000);assert.equal(copies[0].style.transform,frameTransform,'a stalled video freezes the text at the same pose');
+   advance(2000);assert.equal(copies[0].style.transform,expectedTransform(0,transitionProgress(1000*(.4+1/videoFramesPerSecond),0)),'a stalled video permits at most one frame of text interpolation');
+   const frameTransform=copies[0].style.transform;advance(1000);assert.equal(copies[0].style.transform,frameTransform,'bounded interpolation stops without another presented frame');
    video.present(7.95);endLeg();visible(1);assert.equal(still.src,'./media/station-1.webp');assert.equal(video.hidden,true);
    emit(previous,'click');await flush();assert.match(video.src,/transition-0-reverse\.mp4\?v=av1-4m-1$/);
    video.present(.4);assert.equal(copies[1].style.transform,expectedTransform(1,1-transitionProgress(400,0)),'reverse playback drives the reverse camera route');
    endLeg();visible(0);
-   emit(win,'keydown',{key:'End'});await flush();
    for(let leg=0;leg<3;leg++){
+    emit(win,'keydown',{key:'ArrowRight'});await flush();
     assert.match(video.src,new RegExp(`transition-${leg}-forward\\.mp4\\?v=av1-4m-1$`));
+    assert.equal(next.disabled,true,'arrow navigation locks controls during each transition');
     video.present(.4);endLeg();await flush();visible(leg+1);
-    assert.equal(next.disabled,true,'multi-leg navigation stays locked through its intermediate stations');
+    assert.equal(next.disabled,leg===2,'each exact station releases navigation unless it is the final section');
    }
    assert.equal(previous.disabled,false,'the final exact station releases the transition lock');
   }else if(scenario==='autoplay-rejection'){
@@ -177,8 +180,8 @@ if(!scenario){
     transforms.push(copies[0].style.transform);
    }
    assert.ok(new Set(transforms).size>=20,'decoded frames continuously move text despite quantized native scrolling');
-   const exact=transforms.at(-1);assert.notEqual(exact,initial);
-   advance(1000);emit(win,'scroll');assert.equal(copies[0].style.transform,exact,'wall time and delayed native scroll cannot replace media progress');
+   const presented=transforms.at(-1);assert.notEqual(presented,initial);
+   advance(1000);const exact=copies[0].style.transform;emit(win,'scroll');assert.equal(copies[0].style.transform,exact,'delayed native scroll cannot replace bounded media progress');
    doc.hidden=true;emit(doc,'visibilitychange');assert.equal(video.paused,true);
    advance(14000);assert.equal(copies[0].style.transform,exact,'hidden tabs suspend the stall watchdog and retain the same frame');
    doc.hidden=false;emit(doc,'visibilitychange');assert.equal(video.paused,false);assert.equal(copies[0].style.transform,exact);

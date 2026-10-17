@@ -39,9 +39,12 @@ sampler as `highp`; single-precision ray tracing is not used for the media.
 Double precision removes the conspicuous fuzzy clouds produced by accumulated
 rounding in the earlier float32 face traversal.
 
-`prerendered.js` advances the HTML text and navigation from each presented
-video frame's `mediaTime`, using [`requestVideoFrameCallback`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback). A stalled or
-dropped frame therefore cannot advance text ahead of the displayed camera.
+`prerendered.js` anchors HTML text and navigation to each presented video
+frame’s `mediaTime` and `expectedDisplayTime`, using
+[`requestVideoFrameCallback`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback). During transitions, display-refresh
+callbacks interpolate the text clock up to one video frame beyond the latest
+presentation timestamp. This smooths subframe motion while bounding any
+lead over a stalled decoder; waiting, pause, and hidden-tab states freeze it.
 Older browsers use the media element's playback time. There is no continuous
 application rendering loop while a reading station is at rest. WebM carries
 10-bit AV1, preferred when the browser advertises Main-profile level 4.1
