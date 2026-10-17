@@ -127,7 +127,9 @@ if(!scenario){
    assert.ok(downloaded.includes('./media/transition-0-forward.mp4?v=av1-4m-1'));
    advance(1000);assert.equal(copies[0].style.transform,initial,'elapsed wall time cannot move text before decoded frames');
    video.present(.4);assert.equal(video.hidden,false);
-   assert.equal(copies[0].style.transform,expectedTransform(0,transitionProgress(400,0)),'text uses the exact presented media timestamp');
+   assert.equal(copies[0].style.transform,initial,'a new video target does not jump the text in the same callback');
+   advance(32);assert.notEqual(copies[0].style.transform,initial,'display frames smoothly move text toward its video target');
+   assert.notEqual(copies[0].style.transform,expectedTransform(0,transitionProgress(400,0)),'the damped attachment initially trails a discontinuous target');
    assert.match(copies[0].style.transform,/^matrix3d\(/,'moving text retains the full projective plane');
    assert.equal(copies[0].style.willChange,'transform, opacity');
    copies.filter(copy=>copy.style.visibility==='hidden').forEach(copy=>assert.equal(copy.style.willChange,'auto'));
@@ -135,7 +137,8 @@ if(!scenario){
    const frameTransform=copies[0].style.transform;advance(1000);assert.equal(copies[0].style.transform,frameTransform,'bounded interpolation stops without another presented frame');
    video.present(7.95);endLeg();visible(1);assert.equal(still.src,'./media/station-1.webp');assert.equal(video.hidden,true);
    emit(previous,'click');await flush();assert.match(video.src,/transition-0-reverse\.mp4\?v=av1-4m-1$/);
-   video.present(.4);assert.equal(copies[1].style.transform,expectedTransform(1,1-transitionProgress(400,0)),'reverse playback drives the reverse camera route');
+   const reverseStart=copies[1].style.transform;video.present(.4);assert.equal(copies[1].style.transform,reverseStart);
+   advance(2000);assert.equal(copies[1].style.transform,expectedTransform(1,1-transitionProgress(1000*(.4+1/videoFramesPerSecond),0)),'reverse text settles onto the bounded reverse media target');
    endLeg();visible(0);
    for(let leg=0;leg<3;leg++){
     emit(win,'keydown',{key:'ArrowRight'});await flush();
@@ -154,9 +157,9 @@ if(!scenario){
    emit(next,'click');await flush();video.onerror();await flush();assert.match(video.src,/transition-0-forward\.mp4\?v=av1-4m-1$/,'an AV1 decode error tries the supported H.264 format');
    video.onerror();visible(1);assert.equal(video.hidden,true);assert.equal(next.disabled,false);
    assert.equal(still.src,'./media/station-1.webp','both codec failures retain the requested text and station still');
-   emit(next,'click');await flush();video.present(4);
+   emit(next,'click');await flush();video.present(4);advance(300);
    assert.ok(copies.every(copy=>copy.style.opacity!=='1'),'the bridge is between its stationary reading poses');
-   video.onerror();await flush();visible(1);
+   video.onerror();await flush();advance(1000);visible(1);
    assert.equal(still.src,'./media/station-1.webp','a codec retry restores both the source poster and its readable text while loading');
    video.present(4);advance(12016);visible(2);
    assert.equal(still.src,'./media/station-2.webp','a prolonged network/decoder stall also completes with a still');
@@ -176,6 +179,7 @@ if(!scenario){
    const initial=copies[0].style.transform,transforms=[];emit(next,'click');await flush();
    const end=Math.floor(textSlideDuration/3/16)*16;
    for(let time=16;time<=end;time+=16){
+    advance(16);
     video.present(time/1000);assert.equal(scrollY,0,'departure starts within one native scroll pixel');
     transforms.push(copies[0].style.transform);
    }
@@ -185,7 +189,7 @@ if(!scenario){
    doc.hidden=true;emit(doc,'visibilitychange');assert.equal(video.paused,true);
    advance(14000);assert.equal(copies[0].style.transform,exact,'hidden tabs suspend the stall watchdog and retain the same frame');
    doc.hidden=false;emit(doc,'visibilitychange');assert.equal(video.paused,false);assert.equal(copies[0].style.transform,exact);
-   video.present(.6);assert.notEqual(copies[0].style.transform,exact);endLeg();visible(1);
+   video.present(.6);assert.equal(copies[0].style.transform,exact,'resuming a media target does not jump the damped text');advance(32);assert.notEqual(copies[0].style.transform,exact);endLeg();visible(1);
    assert.equal(scrollY,849,'the exact text stop survives a fractional anchor rounded by native scrolling');
   }else if(scenario==='rewind-cancel'){
    emit(next,'click');await flush();video.present(.4);
@@ -198,8 +202,9 @@ if(!scenario){
    const before=video.playCalls;emit(doc,'click',{target:rewind,button:0});advance(16);
    visible(0);assert.equal(video.playCalls,before);assert.equal(still.src,'./media/station-0.webp');assert.equal(doc.activeElement,ids.name);
    emit(next,'click');await flush();video.present(.4);
-   location.hash='#elsewhere';emit(win,'hashchange');visible(3);
-   assert.equal(still.src,'./media/station-3.webp');assert.equal(video.paused,true,'external hash navigation cancels media and settles its exact destination');
+   const currentSource=video.src;location.hash='#elsewhere';emit(win,'hashchange');
+   assert.equal(video.src,currentSource);assert.equal(video.paused,false,'URL hashes no longer interrupt local slide navigation');
+   endLeg();visible(1);assert.equal(still.src,'./media/station-1.webp');
   }
  }
  // Rotation into a short viewport restores readable ordinary document flow.

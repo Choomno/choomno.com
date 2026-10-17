@@ -30,12 +30,13 @@ class Target {
  }
 }
 const win=new Target(),doc=new Target(),media=new Target();media.matches=false;
-globalThis.window=win;globalThis.document=doc;globalThis.innerHeight=800;globalThis.scrollY=0;
+globalThis.window=win;globalThis.document=doc;globalThis.innerHeight=800;globalThis.scrollY=1650;
 globalThis.performance={now:()=>now};globalThis.matchMedia=()=>media;globalThis.getSelection=()=>({toString:()=>''});
 globalThis.requestAnimationFrame=fn=>{rafs.set(++rafId,fn);return rafId;};globalThis.cancelAnimationFrame=id=>rafs.delete(id);
 globalThis.CustomEvent=class{constructor(type,{detail}){this.type=type;this.detail=detail;}};
-const location=new URL('http://localhost/#current-title');globalThis.location=location;
-globalThis.history={state:null,scrollRestoration:'auto',replaceState(_,unused,url){location.href=new URL(url,location).href;},pushState(_,unused,url){location.href=new URL(url,location).href;}};
+const location=new URL('http://localhost/?preview=1#current-title');globalThis.location=location;
+const historyChanges=[];
+globalThis.history={state:null,scrollRestoration:'auto',replaceState(_,unused,url){historyChanges.push(['replace',url]);location.href=new URL(url,location).href;},pushState(_,unused,url){historyChanges.push(['push',url]);location.href=new URL(url,location).href;}};
 win.scrollTo=(_,y)=>{globalThis.scrollY=y;};
 doc.body=new Target('body');doc.documentElement={scrollHeight:3250};doc.createElement=kind=>new Target(kind);
 const geometry=[[84,760],[848.5,801.5],[1650,800.25],[2450,800]];
@@ -55,8 +56,11 @@ function emit(target,type,props={}){
 function advance(ms){const end=now+ms;while(now<end){now=Math.min(end,now+16);const queue=[...rafs.values()];rafs.clear();for(const fn of queue)fn(now);}}
 let enabled=true;
 const nav=initSectionNavigation({isEnabled:()=>enabled});
-assert.equal(nav.active,2,'a heading hash selects its containing section');
-assert.equal(scrollY,1650.125,'fractional section heights retain precise center positions');
+assert.equal(nav.active,0,'an old heading hash opens at the first section');
+assert.equal(scrollY,0,'restored scroll position cannot select a later slide');
+assert.equal(location.href,'http://localhost/?preview=1','initial hash removal preserves path and query');
+assert.deepEqual(historyChanges,[['replace','/?preview=1']]);
+nav.goTo(2,{immediate:true});assert.equal(scrollY,1650.125,'fractional section heights retain precise center positions');
 nav.goTo(0,{immediate:true});assert.equal(scrollY,0,'opening pose leaves header visible');
 nav.goTo(1);assert.equal(nav.goTo(2),false,'transitions cannot be interrupted by another gesture');
 advance(transitionDuration/2);assert.ok(Math.abs(scrollY-849.25/2)<1e-9,'the longer transition is only halfway through at 4 seconds');
@@ -99,10 +103,10 @@ advance(transitionDuration-10);assert.equal(scrollY,1650.125,'A multi-section ju
 advance(transitionDuration);assert.equal(scrollY,2450,'A multi-section jump completes only after all three legs');
 nav.goTo(0);
 for(const y of [1650.125,849.25,0]){advance(transitionDuration);assert.equal(scrollY,y,'A reverse multi-section jump traverses the same anchors in reverse');}
-const distantLink=new Target('a');distantLink.href='http://localhost/#elsewhere';distantLink.attributes.href='#elsewhere';
+const distantLink=new Target('a');distantLink.href='http://localhost/?preview=1#elsewhere';distantLink.attributes.href='#elsewhere';
 assert.equal(emit(doc,'click',{target:distantLink,button:0}).defaultPrevented,true);
 for(const y of [849.25,1650.125,2450]){advance(transitionDuration);assert.equal(scrollY,y,'an internal link traverses consecutive legs');}
-const homeLink=new Target('a');homeLink.href='http://localhost/#name';homeLink.attributes.href='#name';
+const homeLink=new Target('a');homeLink.href='http://localhost/?preview=1#name';homeLink.attributes.href='#name';
 emit(doc,'pointerdown',{target:homeLink});emit(doc,'focusin',{target:new Target('header')});
 assert.equal(nav.active,3,'pointer focus must not bypass a link transition');
 emit(doc,'click',{target:homeLink,button:0});
@@ -147,7 +151,10 @@ emit(win,'touchend',{touches:[{clientX:100,clientY:10}],changedTouches:[{clientX
 emit(win,'touchend',{touches:[],changedTouches:[{clientX:100,clientY:10}]});assert.equal(nav.active,2);
 emit(win,'touchstart',{touches:[{clientX:100,clientY:100}]});emit(win,'touchcancel');
 emit(win,'touchend',{touches:[],changedTouches:[{clientX:100,clientY:10}]});assert.equal(nav.active,2);
-location.hash='#background';emit(win,'hashchange');assert.equal(nav.active,1);assert.equal(scrollY,849.25);
+emit(win,'hashchange');emit(win,'popstate');assert.equal(nav.active,2,'browser history events do not select slides');
+assert.deepEqual(historyChanges,[['replace','/?preview=1']],'slide gestures and internal links never alter history');
+assert.equal(location.href,'http://localhost/?preview=1','slide selection leaves the URL unchanged');
+nav.goTo(1,{immediate:true});
 geometry[1][0]=880;emit(win,'resize');advance(16);assert.equal(scrollY,880.75,'resize reanchors the current section');
 emit(doc,'focusin',{target:new Target('footer')});assert.equal(nav.active,3,'footer focus synchronizes the selected section');
 emit(doc,'focusin',{target:new Target('header')});assert.equal(nav.active,0,'header focus restores the opening section');
@@ -157,7 +164,7 @@ enabled=true;nav.refresh();media.matches=true;emit(media,'change');nav.goTo(3);a
 nav.destroy();assert.equal(history.scrollRestoration,'auto');
 
 // An external media clock owns progress completely, including multi-leg jumps.
-media.matches=false;location.hash='#name';globalThis.scrollY=0;
+media.matches=false;location.hash='#elsewhere';globalThis.scrollY=2450;
 const requests=[],reported=[];
 const mediaNav=initSectionNavigation({isEnabled:()=>enabled,onProgress:value=>reported.push(value),animateTransition(callbacks){
  const request={...callbacks,cancellations:0};requests.push(request);
@@ -168,7 +175,9 @@ const mediaNav=initSectionNavigation({isEnabled:()=>enabled,onProgress:value=>re
  };
 }});
 const mediaControls=doc.body.children.at(-1);
-assert.equal(requests.length,0,'initial hash settlement does not start media playback');
+assert.equal(requests.length,0,'initial settlement does not start media playback');
+assert.equal(mediaNav.active,0,'refreshing an old final-slide URL starts at slide one');
+assert.equal(scrollY,0);assert.equal(location.hash,'');
 assert.equal(mediaNav.goTo(3),true);
 assert.deepEqual([requests[0].from,requests[0].to],[0,3]);
 assert.equal(mediaControls.children[0].disabled,true);assert.equal(mediaControls.children[2].disabled,true);

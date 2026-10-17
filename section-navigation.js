@@ -34,14 +34,14 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   const rect=sections[i].getBoundingClientRect();
   return clamp(scrollY+rect.top+(rect.height-innerHeight)/2,0,Math.max(0,document.documentElement.scrollHeight-innerHeight));
  };
- const nearest=()=>sections.reduce((best,_,i)=>Math.abs(position(i)-scrollY)<Math.abs(position(best)-scrollY)?i:best,0);
  const sectionForHash=hash=>{
   if(!hash||hash==='#')return 0;
   let id;try{id=decodeURIComponent(hash.slice(1));}catch{return -1;}
   const section=document.getElementById(id)?.closest('main > section');
   return sections.indexOf(section);
  };
- const hashFor=i=>'#'+(sections[i].id||sections[i].getAttribute('aria-labelledby')||'');
+ // Slide selection is local UI state; old slide URLs reopen at the beginning.
+ if(location.hash)history.replaceState(history.state,'',location.pathname+location.search);
  const controls=document.createElement('nav');controls.className='section-controls';controls.setAttribute('aria-label','Section navigation');
  const previous=document.createElement('button');previous.type='button';previous.textContent='←';previous.setAttribute('aria-label','Previous section');
  const counter=document.createElement('span');counter.className='section-counter';counter.setAttribute('aria-live','polite');counter.setAttribute('aria-atomic','true');
@@ -56,7 +56,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   ++transitionId;cancelAnimationFrame(animation);animation=0;moving=false;
   const cancel=cancelTransition;cancelTransition=null;cancel?.();
  }
- function goTo(index,{immediate=false,updateHash=true,interrupt=false,focusTarget=null}={}){
+ function goTo(index,{immediate=false,interrupt=false,focusTarget=null}={}){
   if(destroyed||!isEnabled()||(moving&&!interrupt))return false;
   const startIndex=active;
   stop();active=clamp(index,0,sections.length-1);
@@ -65,13 +65,15 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   // Each camera leg meets its neighbors with zero velocity and acceleration.
   // A long jump must therefore ease separately through every reading anchor.
   // Browser scrolling can round a fractional anchor to a device pixel.
-  const anchors=sections.map((_,i)=>position(i)).filter(y=>direction*(y-start)>.75&&direction*(end-y)>.75).sort((a,b)=>direction*(a-b));
+  // These document anchors are fixed for this transition. Measuring them on
+  // every media/text refresh forces layout after the previous transform writes.
+  const positions=sections.map((_,i)=>position(i));
+  const anchors=positions.filter(y=>direction*(y-start)>.75&&direction*(end-y)>.75).sort((a,b)=>direction*(a-b));
   const stops=[start,...anchors,end],duration=legDuration*(stops.length-1);
-  const indices=stops.map((y,i)=>i===0?startIndex:sections.reduce((best,_,j)=>Math.abs(position(j)-y)<Math.abs(position(best)-y)?j:best,active));
+  const indices=stops.map((y,i)=>i===0?startIndex:positions.reduce((best,p,j)=>Math.abs(p-y)<Math.abs(positions[best]-y)?j:best,active));
   const report=value=>{progress=value;onProgress(value);};
   // Let text projection make the destination plane interactive before focusing.
   const focusDestination=()=>{if(focusTarget)requestAnimationFrame(()=>{if(!destroyed&&!moving&&active===index)focusTarget.focus({preventScroll:true});});};
-  if(updateHash)history.replaceState(history.state,'',hashFor(active));
   onChange(active);document.dispatchEvent(new CustomEvent('sectionchange',{detail:{index:active}}));
   if(!duration||startIndex===active||Math.abs(end-start)<.75){window.scrollTo(0,end);report(active);updateControls();focusDestination();return true;}
   moving=true;updateControls();
@@ -85,7 +87,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
     const low=Math.floor(p),high=Math.ceil(p);
     // The media clock supplies an unrounded logical position. Native scroll
     // follows it, while text and camera projection use the original value.
-    window.scrollTo(0,position(low)+(position(high)-position(low))*(p-low));report(p);
+    window.scrollTo(0,positions[low]+(positions[high]-positions[low])*(p-low));report(p);
    },onComplete(){
     if(!current())return;
     if(!isEnabled()){stop();updateControls();return;}
@@ -115,7 +117,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
  function refresh(){
   if(destroyed)return;
   stop();
-  if(isEnabled())goTo(active,{immediate:true,updateHash:false});
+  if(isEnabled())goTo(active,{immediate:true});
   else updateControls();
  }
  const on=(target,type,handler,options)=>{target.addEventListener(type,handler,options);listeners.push(()=>target.removeEventListener(type,handler,options));};
@@ -164,7 +166,7 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
    const url=new URL(link.href,location.href);
    if(url.origin===location.origin&&url.pathname===location.pathname&&url.search===location.search&&(url.hash||link.getAttribute('href')==='#')){
     const index=sectionForHash(url.hash);
-    if(index>=0){event.preventDefault();if(!moving){history.pushState(history.state,'',url.hash||'#');goTo(index,{immediate:link.getAttribute('data-rewind')!==null,updateHash:false,focusTarget:url.hash==='#name'?document.getElementById('name'):null});}}
+    if(index>=0){event.preventDefault();if(!moving){goTo(index,{immediate:link.getAttribute('data-rewind')!==null,focusTarget:url.hash==='#name'?document.getElementById('name'):null});}}
    }
    return;
   }
@@ -185,11 +187,8 @@ export function initSectionNavigation({isEnabled=()=>true,onChange=()=>{},onProg
   const index=section?sections.indexOf(section):event.target.closest('header')?0:event.target.closest('footer')?sections.length-1:-1;
   if(index>=0&&index!==active)goTo(index,{immediate:true,interrupt:true});
  });
- const followHash=()=>{if(!isEnabled())return;const index=sectionForHash(location.hash);if(index>=0)goTo(index,{immediate:true,updateHash:false,interrupt:true});};
- on(window,'hashchange',followHash);
- on(window,'popstate',followHash);
  on(window,'resize',()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(refresh);});
  on(reduced,'change',refresh);
- const initial=sectionForHash(location.hash);active=initial>=0?initial:nearest();refresh();
+ refresh();
  return {goTo,refresh,get active(){return active;},get progress(){return progress;},destroy(){destroyed=true;stop();cancelAnimationFrame(resizeFrame);listeners.forEach(remove=>remove());controls.remove();history.scrollRestoration=oldRestoration;}};
 }

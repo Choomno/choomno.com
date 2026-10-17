@@ -45,7 +45,12 @@ frame’s `mediaTime` and `expectedDisplayTime`, using
 callbacks interpolate the text clock up to one video frame beyond the latest
 presentation timestamp. This smooths subframe motion while bounding any
 lead over a stalled decoder; waiting, pause, and hidden-tab states freeze it.
-Older browsers use the media element's playback time. There is no continuous
+Older browsers use the media element's playback time. `text-suspension.js`
+attaches the projected text to this route coordinate with an exactly integrated
+critically damped spring (55 radians/second), absorbing callback jitter with
+about 36 ms of lag for steady motion. Reading stops, rewind, resizing, and
+reduced-motion changes settle on the exact geometry; the spring runs only
+while its target is changing or it is settling. There is no continuous
 application rendering loop while a reading station is at rest. WebM carries
 10-bit AV1, preferred when the browser advertises Main-profile level 4.1
 10-bit decoding (`av01.0.09M.10`). MP4 provides an H.264 fallback. Both use
@@ -419,3 +424,7 @@ The animation is a fixed full-page background with muted neutral beams.
 Background controls are collapsible and reduced-motion preferences are respected.
 Visitors decode prerecorded clips during transitions and display a still image
 at each reading station.
+
+Slide selection is local interface state. Navigation does not write URL
+fragments or add history entries, and a fresh load clears old fragments and
+starts at the first reading station.
